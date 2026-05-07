@@ -327,6 +327,26 @@ document.getElementById('exit-match-btn').addEventListener('click', () => {
     if (window.confirm(msg)) returnToMenu();
 });
 
+// Boton pantalla completa (utilidad principalmente movil/tablet)
+document.getElementById('fullscreen-btn').addEventListener('click', () => {
+    const el = document.documentElement;
+    const inFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (!inFullscreen) {
+        const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        if (req) req.call(el).catch(() => {});
+        // Bloquear orientacion en horizontal en moviles que lo soporten
+        if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').catch(() => {});
+        }
+    } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+        if (exit) exit.call(document);
+        if (screen.orientation && screen.orientation.unlock) {
+            try { screen.orientation.unlock(); } catch (_) {}
+        }
+    }
+});
+
 // --- Modo local ---
 playLocalBtn.addEventListener('click', () => {
     net.mode = 'local';
@@ -410,11 +430,15 @@ function startGame() {
     // Canvas 2D acepta drawImage de imagenes locales sin problema.
     phaserGame = new Phaser.Game({
         type: Phaser.CANVAS,
-        width: FIELD_W,
-        height: FIELD_H,
         parent: 'game-container',
         backgroundColor: '#0a1208',
         physics: { default: 'matter', matter: { gravity: { x: 0, y: 0 }, debug: false } },
+        scale: {
+            mode: Phaser.Scale.FIT,                  // escala manteniendo aspect-ratio
+            autoCenter: Phaser.Scale.CENTER_BOTH,    // centrado en el contenedor
+            width: FIELD_W,
+            height: FIELD_H
+        },
         scene: { create, update }
     });
     updateUI();
