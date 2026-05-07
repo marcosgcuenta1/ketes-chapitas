@@ -265,9 +265,12 @@ avatarsEl.addEventListener('click', (e) => {
 document.getElementById('carousel-prev').addEventListener('click', () => moveCarousel(-1));
 document.getElementById('carousel-next').addEventListener('click', () => moveCarousel(1));
 
-// Teclado: flechas izq/der mientras el menu este visible y no haya inputs activos
+// Teclado: flechas izq/der mientras el menu este visible y no haya inputs activos.
+// Importante: ignorar tambien si el menu esta en modo compact (paneles host/join abiertos),
+// porque entonces el carrusel esta oculto y mover el skin a ciegas seria un bug.
 window.addEventListener('keydown', (e) => {
     if (menu.classList.contains('hidden')) return;
+    if (menuCard.classList.contains('compact')) return;
     if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
     if (e.key === 'ArrowLeft')  { moveCarousel(-1); e.preventDefault(); }
     if (e.key === 'ArrowRight') { moveCarousel(1);  e.preventDefault(); }
