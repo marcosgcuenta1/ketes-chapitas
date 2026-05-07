@@ -1,0 +1,12 @@
+Guarda en esta carpeta la tira vertical con las 10 caras como un solo archivo PNG llamado:
+
+    players-strip.png
+
+Requisitos:
+- Las 10 caras deben estar apiladas verticalmente, todas con el mismo alto exacto.
+- Formato PNG (idealmente con fondo transparente; si tiene blanco no pasa nada porque
+  el codigo recorta la cara dentro de un circulo).
+- Anchura cualquiera; el codigo escala. Pero conviene que cada celda sea cuadrada o
+  similar para que la cara se vea centrada y sin distorsion.
+
+Si no lo guardas, el juego usa chapas de color como antes.

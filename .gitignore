@@ -1,0 +1,11 @@
+# SO
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+
+# Node (por si algun dia se anyade)
+node_modules/
