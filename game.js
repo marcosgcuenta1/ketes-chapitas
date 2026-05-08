@@ -423,11 +423,35 @@ function startGame() {
 // ================================================================
 // RED (PeerJS)
 // ================================================================
+// Servidores ICE: STUN de Google + TURN public de Open Relay como fallback.
+// El TURN actua de relay cuando STUN no consigue atravesar el NAT.
+const PEER_CONFIG = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        }
+    ]
+};
+
 function setupHost() {
     net.mode = 'host';
     net.myTeam = 'red';
 
-    net.peer = new Peer();
+    net.peer = new Peer({ config: PEER_CONFIG, debug: 1 });
     net.peer.on('open', (id) => {
         hostCodeEl.textContent = id;
         hostStatus.textContent = 'Esperando rival…';
@@ -456,7 +480,7 @@ function setupClient(hostId) {
     joinStatus.className = 'net-status';
     joinConnectBtn.disabled = true;
 
-    net.peer = new Peer();
+    net.peer = new Peer({ config: PEER_CONFIG, debug: 1 });
     net.peer.on('open', () => {
         const conn = net.peer.connect(hostId, { reliable: true });
         net.conn = conn;
