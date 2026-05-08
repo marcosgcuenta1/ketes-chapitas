@@ -26,7 +26,7 @@ const RESTITUTION_WALL  = 0.55;
 
 const FRICTION_AIR_PLAYER = 0.04;
 const FRICTION_AIR_BALL   = 0.012;
-const STOP_THRESH         = 0.22;     // snap a 0 antes; corta la cola lenta del balon
+const STOP_THRESH         = 0.35;     // snap a 0 antes; corta la cola lenta del balon
 
 const FORCE_MULT    = 0.05;
 const MAX_VELOCITY  = 22;
