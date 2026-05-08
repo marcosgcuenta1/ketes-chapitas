@@ -1238,6 +1238,125 @@
             margin-bottom: 28px;
         }
 
+        /* ---------- Pantalla de trofeos ---------- */
+        .trophies-screen {
+            position: fixed; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 26;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            transition: opacity 280ms ease, visibility 280ms ease;
+        }
+        .trophies-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+        .trophies-card {
+            backdrop-filter: blur(22px) saturate(160%);
+            -webkit-backdrop-filter: blur(22px) saturate(160%);
+            background: rgba(20,22,30,0.88);
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 22px;
+            padding: 36px 44px 28px;
+            min-width: 720px;
+            max-height: 80vh;
+            overflow-y: auto;
+            text-align: center;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.65);
+        }
+        .trophies-title {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
+            font-size: 30px;
+            letter-spacing: 6px;
+            margin: 0 0 8px;
+            background: linear-gradient(135deg, #ffd87a, #ffa940);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .trophies-stats {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 24px;
+        }
+        .trophies-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 22px;
+        }
+        .trophy-card {
+            display: flex; align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            text-align: left;
+        }
+        .trophy-card.unlocked {
+            background: rgba(255,200,80,0.08);
+            border-color: rgba(255,200,80,0.40);
+            box-shadow: 0 0 18px rgba(255,200,80,0.10);
+        }
+        .trophy-card.locked { opacity: 0.42; }
+        .trophy-card-emoji { font-size: 32px; line-height: 1; flex-shrink: 0; }
+        .trophy-card-text { display: flex; flex-direction: column; gap: 2px; line-height: 1.2; }
+        .trophy-card-name { font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 1.5px; color: #fff; }
+        .trophy-card-desc { font-family: 'Orbitron', sans-serif; font-size: 10px; opacity: 0.65; }
+
+        /* Toast emergente al desbloquear */
+        .trophy-toasts {
+            position: fixed;
+            top: 18px; right: 18px;
+            display: flex; flex-direction: column; gap: 8px;
+            z-index: 60;
+            pointer-events: none;
+        }
+        .trophy-toast {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px 16px;
+            background: rgba(20,22,30,0.92);
+            border: 1px solid rgba(255,200,80,0.5);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.55), 0 0 24px rgba(255,200,80,0.20);
+            opacity: 0;
+            transform: translateX(120%);
+            transition: opacity 320ms ease, transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+            max-width: 320px;
+        }
+        .trophy-toast.shown { opacity: 1; transform: translateX(0); }
+        .trophy-toast-emoji { font-size: 32px; line-height: 1; }
+        .trophy-toast-text { display: flex; flex-direction: column; gap: 2px; }
+        .trophy-toast-label { font-family: 'Orbitron', sans-serif; font-size: 9px; letter-spacing: 2px; color: #ffd87a; }
+        .trophy-toast-name  { font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 1.5px; color: #fff; }
+        .trophy-toast-desc  { font-family: 'Orbitron', sans-serif; font-size: 10px; opacity: 0.7; }
+
+        /* Boton de trofeos en menu */
+        .trophies-btn {
+            position: fixed;
+            top: 18px; right: 18px;
+            background: rgba(255,200,80,0.10);
+            border: 1px solid rgba(255,200,80,0.32);
+            color: #ffd87a;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 11px;
+            letter-spacing: 3px;
+            padding: 10px 18px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: all 160ms ease;
+            z-index: 22;
+        }
+        .trophies-btn:hover {
+            background: rgba(255,200,80,0.20);
+            border-color: rgba(255,200,80,0.55);
+            transform: scale(1.05);
+        }
+        .trophies-btn.hidden { display: none; }
+
         /* ---------- Fade overlay para transiciones ---------- */
         .fade {
             position: fixed; inset: 0; background: #000;
@@ -1249,6 +1368,9 @@
     </style>
 </head>
 <body>
+    <!-- Boton de trofeos (en menu principal) -->
+    <button id="trophies-btn" class="trophies-btn" title="Tus trofeos y estadísticas">🏆 TROFEOS</button>
+
     <!-- Menu principal (Lobby) -->
     <div id="menu" class="menu">
         <div class="menu-card" id="menu-card">
@@ -1472,6 +1594,19 @@
             <button id="back-to-menu-btn" class="play-btn">VOLVER AL MENÚ</button>
         </div>
     </div>
+
+    <!-- Pantalla de trofeos -->
+    <div id="trophies-screen" class="trophies-screen hidden">
+        <div class="trophies-card">
+            <h2 class="trophies-title">TROFEOS</h2>
+            <div class="trophies-stats" id="trophies-stats"></div>
+            <div class="trophies-grid" id="trophies-grid"></div>
+            <button class="back-btn" id="trophies-close">CERRAR</button>
+        </div>
+    </div>
+
+    <!-- Toasts de trofeos desbloqueados -->
+    <div id="trophy-toasts" class="trophy-toasts"></div>
 
     <div id="fade" class="fade"></div>
 

@@ -242,6 +242,110 @@ function setMuted(value) {
 }
 
 // ================================================================
+// PERSISTENCIA (localStorage): stats, skin recordado, trofeos
+// ================================================================
+const STATE_KEY = 'chapitas:state';
+const DEFAULT_STATE = {
+    lastSkin: 0,
+    stats: {
+        games: 0, wins: 0, losses: 0, ties: 0,
+        goalsFor: 0, goalsAgainst: 0,
+        bestStreak: 0, currentStreak: 0,
+        byBot: {}     // jorge: {wins, losses}, etc.
+    },
+    trophies: []   // ids desbloqueados
+};
+
+function loadState() {
+    try {
+        const raw = localStorage.getItem(STATE_KEY);
+        if (!raw) return JSON.parse(JSON.stringify(DEFAULT_STATE));
+        const parsed = JSON.parse(raw);
+        return Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), parsed, {
+            stats: Object.assign({}, DEFAULT_STATE.stats, parsed.stats || {}),
+            trophies: parsed.trophies || []
+        });
+    } catch (_) { return JSON.parse(JSON.stringify(DEFAULT_STATE)); }
+}
+function saveState() {
+    try { localStorage.setItem(STATE_KEY, JSON.stringify(persistState)); } catch (_) {}
+}
+
+const persistState = loadState();
+
+const TROPHIES = [
+    { id: 'first_goal',    name: 'PRIMER GOL',          desc: 'Marca tu primer gol',           emoji: '⚽' },
+    { id: 'first_win',     name: 'PRIMERA VICTORIA',    desc: 'Gana tu primer partido',        emoji: '🥇' },
+    { id: 'hat_trick',     name: 'HAT-TRICK',           desc: '3 goles en una partida',        emoji: '🎩' },
+    { id: 'clean_sheet',   name: 'PORTERIA A CERO',     desc: 'Gana sin encajar',              emoji: '🛡️' },
+    { id: 'beat_jorge',    name: 'VOMITIVO DERROTADO',  desc: 'Vence a Maverick',              emoji: '🤮' },
+    { id: 'beat_querol',   name: 'MAESTRO VENCIDO',     desc: 'Vence a Querooool',             emoji: '🎉' },
+    { id: 'beat_marcos',   name: 'SEBO MASTER FUERA',   desc: 'Vence a Ketes (difícil)',       emoji: '⚔️' },
+    { id: 'streak_3',      name: 'RACHA CALIENTE',      desc: '3 victorias seguidas',          emoji: '🔥' },
+    { id: 'games_10',      name: 'VETERANO',            desc: '10 partidas jugadas',           emoji: '🎮' },
+    { id: 'games_50',      name: 'ADICTO',              desc: '50 partidas jugadas',           emoji: '🎯' }
+];
+
+function unlockTrophy(id) {
+    if (persistState.trophies.includes(id)) return false;
+    persistState.trophies.push(id);
+    saveState();
+    const t = TROPHIES.find(x => x.id === id);
+    if (t) showTrophyToast(t);
+    return true;
+}
+
+function recordMatchResult(matchData) {
+    // matchData = { won, lost, tied, scoreFor, scoreAgainst, botId, mode }
+    const s = persistState.stats;
+    s.games++;
+    if (matchData.won)  { s.wins++;   s.currentStreak++;  s.bestStreak = Math.max(s.bestStreak, s.currentStreak); }
+    if (matchData.lost) { s.losses++; s.currentStreak = 0; }
+    if (matchData.tied) { s.ties++; }
+    s.goalsFor     += matchData.scoreFor || 0;
+    s.goalsAgainst += matchData.scoreAgainst || 0;
+    if (matchData.botId) {
+        const b = s.byBot[matchData.botId] || { wins: 0, losses: 0 };
+        if (matchData.won)  b.wins++;
+        if (matchData.lost) b.losses++;
+        s.byBot[matchData.botId] = b;
+    }
+    saveState();
+
+    // Trofeos
+    if ((matchData.scoreFor || 0) >= 1)               unlockTrophy('first_goal');
+    if (matchData.won)                                unlockTrophy('first_win');
+    if ((matchData.scoreFor || 0) >= 3)               unlockTrophy('hat_trick');
+    if (matchData.won && matchData.scoreAgainst === 0) unlockTrophy('clean_sheet');
+    if (matchData.won && matchData.botId === 'jorge')  unlockTrophy('beat_jorge');
+    if (matchData.won && matchData.botId === 'querol') unlockTrophy('beat_querol');
+    if (matchData.won && matchData.botId === 'marcos') unlockTrophy('beat_marcos');
+    if (s.currentStreak >= 3)                          unlockTrophy('streak_3');
+    if (s.games >= 10)                                 unlockTrophy('games_10');
+    if (s.games >= 50)                                 unlockTrophy('games_50');
+}
+
+function showTrophyToast(trophy) {
+    const cont = document.getElementById('trophy-toasts');
+    if (!cont) return;
+    const el = document.createElement('div');
+    el.className = 'trophy-toast';
+    el.innerHTML = `
+        <div class="trophy-toast-emoji">${trophy.emoji}</div>
+        <div class="trophy-toast-text">
+            <div class="trophy-toast-label">TROFEO DESBLOQUEADO</div>
+            <div class="trophy-toast-name">${trophy.name}</div>
+            <div class="trophy-toast-desc">${trophy.desc}</div>
+        </div>`;
+    cont.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('shown'));
+    setTimeout(() => {
+        el.classList.remove('shown');
+        setTimeout(() => el.remove(), 400);
+    }, 3500);
+}
+
+// ================================================================
 // ESTADO
 // ================================================================
 let ball;                             // primer (o unico) balon
@@ -388,7 +492,9 @@ function loadAvatars() {
     });
 }
 
-let currentIndex = 0;
+// Cargamos el ultimo skin elegido (si existe) desde la persistencia
+selectedSkin = (typeof persistState.lastSkin === 'number') ? persistState.lastSkin : 0;
+let currentIndex = selectedSkin;
 
 function renderAvatarSwatches() {
     avatarsEl.innerHTML = '';
@@ -436,6 +542,10 @@ function updateCarousel() {
         item.dataset.offset = String(offset);
     });
     selectedSkin = currentIndex;
+    if (persistState.lastSkin !== currentIndex) {
+        persistState.lastSkin = currentIndex;
+        saveState();
+    }
 }
 
 function moveCarousel(delta) {
@@ -546,6 +656,47 @@ document.getElementById('exit-match-btn').addEventListener('click', () => {
     if (window.confirm(msg)) returnToMenu();
 });
 
+// Pantalla de trofeos
+const trophiesBtn    = document.getElementById('trophies-btn');
+const trophiesScreen = document.getElementById('trophies-screen');
+const trophiesGrid   = document.getElementById('trophies-grid');
+const trophiesStats  = document.getElementById('trophies-stats');
+
+function renderTrophies() {
+    const s = persistState.stats;
+    const winRate = s.games > 0 ? Math.round((s.wins / s.games) * 100) : 0;
+    trophiesStats.innerHTML =
+        `<b>${s.games}</b> partidas · <b>${s.wins}</b> ganadas · <b>${s.losses}</b> perdidas` +
+        (s.ties ? ` · <b>${s.ties}</b> empates` : '') +
+        ` · ${winRate}% · ⚽ <b>${s.goalsFor}</b>:<b>${s.goalsAgainst}</b>` +
+        (s.bestStreak ? ` · 🔥 racha <b>${s.bestStreak}</b>` : '');
+
+    trophiesGrid.innerHTML = '';
+    for (const t of TROPHIES) {
+        const unlocked = persistState.trophies.includes(t.id);
+        const card = document.createElement('div');
+        card.className = 'trophy-card ' + (unlocked ? 'unlocked' : 'locked');
+        card.innerHTML =
+            `<div class="trophy-card-emoji">${unlocked ? t.emoji : '🔒'}</div>` +
+            `<div class="trophy-card-text">` +
+                `<div class="trophy-card-name">${t.name}</div>` +
+                `<div class="trophy-card-desc">${t.desc}</div>` +
+            `</div>`;
+        trophiesGrid.appendChild(card);
+    }
+}
+
+trophiesBtn.addEventListener('click', () => {
+    renderTrophies();
+    trophiesScreen.classList.remove('hidden');
+});
+document.getElementById('trophies-close').addEventListener('click', () => {
+    trophiesScreen.classList.add('hidden');
+});
+trophiesScreen.addEventListener('click', (e) => {
+    if (e.target === trophiesScreen) trophiesScreen.classList.add('hidden');
+});
+
 // Toggle de sonido
 const soundBtn = document.getElementById('sound-btn');
 if (soundBtn) {
@@ -634,6 +785,7 @@ function transitionToGame(startCallback) {
     setTimeout(() => {
         menu.classList.add('hidden');
         gameScreen.classList.remove('hidden');
+        if (trophiesBtn) trophiesBtn.classList.add('hidden');
         startCallback();
         setTimeout(() => fade.classList.remove('active'), 80);
     }, 320);
@@ -2968,6 +3120,19 @@ function showMatchEnd(winner) {
 
     dom.matchEnd.classList.add('visible');
 
+    // Persistir resultado y verificar trofeos (solo en local; online lo registramos
+    // tambien para el cliente porque su perspectiva es valida)
+    const myTeam = net.myTeam || 'red';
+    const won  = winner !== 'tie' && winner === myTeam;
+    const lost = winner !== 'tie' && winner !== myTeam;
+    const tied = winner === 'tie';
+    const scoreFor     = score[myTeam];
+    const scoreAgainst = score[myTeam === 'red' ? 'blue' : 'red'];
+    const botId = (net.mode === 'local' && currentBot)
+        ? Object.keys(BOTS).find(k => BOTS[k] === currentBot)
+        : null;
+    recordMatchResult({ won, lost, tied, scoreFor, scoreAgainst, botId, mode: currentMode });
+
     // Confeti: tres oleadas de emojis de fiesta
     const partyEmojis = ['🎉', '🎊', '✨', '🎈', '⭐', '🥳', '🏆', '🎆'];
     spawnMatchEndConfetti(partyEmojis, 70, 0);
@@ -3060,6 +3225,7 @@ function returnToMenu() {
         freekickRound = 1;
         freekickShots = 0;
         if (typeof updateModeUI === 'function') updateModeUI();
+        if (trophiesBtn) trophiesBtn.classList.remove('hidden');
         menu.classList.remove('hidden');
         showPanel(null);
         dom.netBadge.classList.remove('visible', 'warning');
