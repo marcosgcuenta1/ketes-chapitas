@@ -803,6 +803,39 @@ document.addEventListener('click', (e) => {
     }
 }, true);
 
+// --- Tutorial inicial (solo si no se ha visto antes) ---
+const tutorialOverlay = document.getElementById('tutorial-overlay');
+const tutorialCloseBtn = document.getElementById('tutorial-close');
+function showTutorialIfNeeded() {
+    if (!tutorialOverlay) return;
+    if (persistState.tutorialSeen) return;
+    // Si el usuario ya tiene partidas registradas (de versiones previas sin tutorial),
+    // damoslo por visto silenciosamente para no estorbar.
+    if (persistState.stats && persistState.stats.games > 0) {
+        persistState.tutorialSeen = true;
+        saveState();
+        return;
+    }
+    tutorialOverlay.classList.remove('hidden');
+}
+function dismissTutorial() {
+    if (!tutorialOverlay) return;
+    tutorialOverlay.classList.add('fading-out');
+    setTimeout(() => {
+        tutorialOverlay.classList.add('hidden');
+        tutorialOverlay.classList.remove('fading-out');
+    }, 320);
+    persistState.tutorialSeen = true;
+    saveState();
+}
+if (tutorialCloseBtn) {
+    tutorialCloseBtn.addEventListener('click', () => {
+        playUiClick();
+        dismissTutorial();
+    });
+}
+showTutorialIfNeeded();
+
 // --- Selector de clima ---
 const weatherRow = document.getElementById('weather-row');
 if (weatherRow) {

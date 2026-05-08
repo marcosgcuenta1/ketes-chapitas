@@ -1429,6 +1429,78 @@
         }
         .trophies-btn.hidden { display: none; }
 
+        /* ---------- Tutorial inicial ---------- */
+        .tutorial-overlay {
+            position: fixed; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.78);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 80;
+            opacity: 1;
+            transition: opacity 320ms ease;
+        }
+        .tutorial-overlay.hidden { display: none; }
+        .tutorial-overlay.fading-out { opacity: 0; pointer-events: none; }
+        .tutorial-card {
+            background: rgba(18, 22, 32, 0.96);
+            border: 1px solid rgba(255, 216, 122, 0.40);
+            border-radius: 22px;
+            padding: 36px 40px 32px;
+            max-width: 580px;
+            width: 92%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.55), 0 0 40px rgba(255,216,122,0.20);
+            font-family: 'Orbitron', sans-serif;
+            color: #fff;
+            text-align: center;
+        }
+        .tutorial-title {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 3px;
+            margin: 0 0 6px;
+            color: #ffd87a;
+            text-shadow: 0 0 16px rgba(255,216,122,0.55);
+        }
+        .tutorial-sub {
+            font-size: 12px;
+            letter-spacing: 2px;
+            opacity: 0.65;
+            margin: 0 0 26px;
+        }
+        .tutorial-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            text-align: left;
+            margin-bottom: 26px;
+        }
+        .tutorial-step {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 14px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+        }
+        .tutorial-step-emoji { font-size: 36px; line-height: 1; flex-shrink: 0; }
+        .tutorial-step-text  { display: flex; flex-direction: column; gap: 4px; }
+        .tutorial-step-title {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #ffd87a;
+        }
+        .tutorial-step-desc {
+            font-size: 12px;
+            font-weight: 400;
+            letter-spacing: 0.5px;
+            opacity: 0.85;
+            line-height: 1.4;
+            font-family: 'Inter', sans-serif;
+        }
+
         /* ---------- Fade overlay para transiciones ---------- */
         .fade {
             position: fixed; inset: 0; background: #000;
@@ -1688,6 +1760,45 @@
 
     <!-- Toasts de trofeos desbloqueados -->
     <div id="trophy-toasts" class="trophy-toasts"></div>
+
+    <!-- Tutorial de bienvenida (solo primera visita) -->
+    <div id="tutorial-overlay" class="tutorial-overlay hidden">
+        <div class="tutorial-card">
+            <h2 class="tutorial-title">BIENVENIDO A CHAPITAS</h2>
+            <p class="tutorial-sub">aprende a jugar en 30 segundos</p>
+            <div class="tutorial-steps">
+                <div class="tutorial-step">
+                    <span class="tutorial-step-emoji">👆</span>
+                    <div class="tutorial-step-text">
+                        <span class="tutorial-step-title">1. ELIGE Y ARRASTRA</span>
+                        <span class="tutorial-step-desc">Pulsa una chapa propia y arrastra hacia atrás (tipo tirachinas).</span>
+                    </div>
+                </div>
+                <div class="tutorial-step">
+                    <span class="tutorial-step-emoji">💥</span>
+                    <div class="tutorial-step-text">
+                        <span class="tutorial-step-title">2. SUELTA PARA DISPARAR</span>
+                        <span class="tutorial-step-desc">Cuanto más arrastres, más fuerte sale. Apunta bien.</span>
+                    </div>
+                </div>
+                <div class="tutorial-step">
+                    <span class="tutorial-step-emoji">⚽</span>
+                    <div class="tutorial-step-text">
+                        <span class="tutorial-step-title">3. MARCA GOL</span>
+                        <span class="tutorial-step-desc">Mete el balón en la portería contraria. Por turnos.</span>
+                    </div>
+                </div>
+                <div class="tutorial-step">
+                    <span class="tutorial-step-emoji">⚡</span>
+                    <div class="tutorial-step-text">
+                        <span class="tutorial-step-title">EXTRA: TURBO</span>
+                        <span class="tutorial-step-desc">1 vez por partido el botón ⚡ aumenta la potencia del próximo disparo.</span>
+                    </div>
+                </div>
+            </div>
+            <button id="tutorial-close" class="play-btn">¡A JUGAR!</button>
+        </div>
+    </div>
 
     <div id="fade" class="fade"></div>
 
