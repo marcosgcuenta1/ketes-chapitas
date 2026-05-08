@@ -91,6 +91,15 @@ const GAME_MODES = {
         barriersByRound: [2, 3, 4],
         rounds: 3,
         goalsToWin: 999    // no se usa: el match end es por rondas, no por goles
+    },
+    knockout: {
+        label: 'KNOCKOUT',
+        description: '5 vs 5 sin balon. Tira las chapas del rival fuera del campo. Ultima en pie gana',
+        emoji: '💥',
+        formation: FORMATION,
+        ballCount: 0,
+        isKnockout: true,
+        goalsToWin: 999    // no se usa: el match end es por chapas
     }
 };
 
@@ -413,8 +422,15 @@ function setState(s) {
 }
 
 function updateUI() {
-    dom.scoreRed.textContent  = score.red;
-    dom.scoreBlue.textContent = score.blue;
+    const mode = GAME_MODES[currentMode];
+    if (mode && mode.isKnockout) {
+        // En Knockout el "marcador" muestra chapas restantes de cada equipo
+        dom.scoreRed.textContent  = (players.red  || []).length;
+        dom.scoreBlue.textContent = (players.blue || []).length;
+    } else {
+        dom.scoreRed.textContent  = score.red;
+        dom.scoreBlue.textContent = score.blue;
+    }
 
     if (net.mode === 'local') {
         if (currentBot) {
@@ -1075,19 +1091,28 @@ function create() {
 
     drawStadium(this);
 
-    buildTopBottomWalls(this);
-    buildGoal(this, 'left');
-    buildGoal(this, 'right');
-
-    drawGoalDecor(this, 'left');
-    drawGoalDecor(this, 'right');
-
     const mode = GAME_MODES[currentMode] || GAME_MODES.normal3;
+
+    // En Knockout no hay paredes (las chapas pueden salir y desaparecer) ni porterias ni balon.
+    if (!mode.isKnockout) {
+        buildTopBottomWalls(this);
+        buildGoal(this, 'left');
+        buildGoal(this, 'right');
+        drawGoalDecor(this, 'left');
+        drawGoalDecor(this, 'right');
+    }
+
     if (mode.isFreekick) {
-        // Tiro libre: configuracion especial con respawn por ronda
         freekickRound = 1;
         freekickShots = 0;
         spawnFreekickRound(this, 'red', 1);
+    } else if (mode.isKnockout) {
+        // Knockout: equipos en formacion pero sin balon
+        spawnTeam(this, 'red');
+        spawnTeam(this, 'blue');
+        balls = [];
+        ball = null;
+        discs = [...players.red, ...players.blue];
     } else {
         spawnTeam(this, 'red');
         spawnTeam(this, 'blue');
@@ -1101,7 +1126,7 @@ function create() {
     aimGfx       = this.add.graphics().setDepth(15);
 
     setupWallBounceCorrection(this);
-    setupGoalDetection(this);
+    if (!mode.isKnockout) setupGoalDetection(this);   // Knockout no tiene sensor de gol
     setupImpactDetection(this);
 
     setupInput(this);
@@ -1242,6 +1267,7 @@ function update(time) {
     updateBallSpin();
     updateShadows();
     updateTurboButton();
+    updateKnockoutEliminations();
 
     if (gameState !== 'PHYSICS_SIMULATION') return;
     if (awaitingSync) return;
@@ -1259,6 +1285,35 @@ function update(time) {
         }
 
         const mode = GAME_MODES[currentMode] || GAME_MODES.normal3;
+
+        // === Modo Knockout: gana el equipo que conserve chapas ===
+        if (mode.isKnockout) {
+            selectedDisc = null;
+            activeTrail = null;
+            trailGfx.clear();
+
+            const redAlive  = players.red.length;
+            const blueAlive = players.blue.length;
+            if (redAlive === 0 || blueAlive === 0) {
+                let winner;
+                if (redAlive === 0 && blueAlive === 0) winner = 'tie';
+                else if (redAlive > 0) winner = 'red';
+                else                   winner = 'blue';
+                updateUI();
+                setState('MATCH_END');
+                if (net.mode === 'host') sendNet({ ...buildSync(), gameOver: winner });
+                showMatchEnd(winner);
+                return;
+            }
+
+            // Cambia turno al equipo rival; si el rival no tiene chapas (raro) lo dejamos igual
+            currentTeam = currentTeam === 'red' ? 'blue' : 'red';
+            updateUI();
+            setState('WAITING_FOR_INPUT');
+            if (net.mode === 'host') sendNet(buildSync());
+            maybeStartAITurn();
+            return;
+        }
 
         // === Modo Tiro libre: rondas con respawn ===
         if (mode.isFreekick) {
@@ -1335,6 +1390,47 @@ function allStopped() {
         if (Math.hypot(v.x, v.y) >= STOP_THRESH) return false;
     }
     return true;
+}
+
+// === KNOCKOUT ===
+// Elimina una chapa: la quita de discs, players, su sombra y la destruye.
+function eliminateDisc(disc) {
+    if (!disc || disc._eliminated) return;
+    disc._eliminated = true;
+    const team = disc.team;
+    if (team && players[team]) {
+        const i = players[team].indexOf(disc);
+        if (i >= 0) players[team].splice(i, 1);
+    }
+    const j = discs.indexOf(disc);
+    if (j >= 0) discs.splice(j, 1);
+    if (selectedDisc === disc) selectedDisc = null;
+    if (activeTrail && activeTrail.disc === disc) activeTrail = null;
+    if (disc.shadowSprite) {
+        try { disc.shadowSprite.destroy(); } catch (_) {}
+    }
+    try { disc.destroy(); } catch (_) {}
+    playBounce(8);   // sonido de "expulsion"
+    updateUI();
+}
+
+// Recorre los discos y elimina los que se han salido del rectangulo del campo.
+// Solo aplica en modo Knockout (donde no hay paredes externas).
+function updateKnockoutEliminations() {
+    const mode = GAME_MODES[currentMode];
+    if (!mode || !mode.isKnockout) return;
+    const margin = PLAYER_RADIUS + 30;
+    const minX = FIELD_PAD_X - margin;
+    const maxX = FIELD_W - FIELD_PAD_X + margin;
+    const minY = FIELD_PAD_Y - margin;
+    const maxY = FIELD_H - FIELD_PAD_Y + margin;
+    const toKill = [];
+    for (const d of discs) {
+        if (d.x < minX || d.x > maxX || d.y < minY || d.y > maxY) {
+            toKill.push(d);
+        }
+    }
+    for (const d of toKill) eliminateDisc(d);
 }
 
 // ================================================================
@@ -3066,7 +3162,65 @@ function aiDecideHard() {
     };
 }
 
+// Knockout: empuja una chapa rival hacia el borde mas cercano del campo
+// (el atacante propio se coloca al lado opuesto del rival respecto al borde,
+//  apuntando hacia ese borde con potencia maxima).
+function aiDecideKnockout() {
+    if (!players.blue.length || !players.red.length) return null;
+    const cxField = FIELD_W / 2;
+    const cyField = FIELD_H / 2;
+    const candidates = [];
+    for (const target of players.red) {
+        // Borde mas cercano del rival (calcula distancia a cada borde y se queda con el min)
+        const dL = target.x - FIELD_PAD_X;
+        const dR = (FIELD_W - FIELD_PAD_X) - target.x;
+        const dT = target.y - FIELD_PAD_Y;
+        const dB = (FIELD_H - FIELD_PAD_Y) - target.y;
+        let edgeUx = 0, edgeUy = 0, edgeDist = Infinity;
+        if (dL < edgeDist) { edgeDist = dL; edgeUx = -1; edgeUy =  0; }
+        if (dR < edgeDist) { edgeDist = dR; edgeUx =  1; edgeUy =  0; }
+        if (dT < edgeDist) { edgeDist = dT; edgeUx =  0; edgeUy = -1; }
+        if (dB < edgeDist) { edgeDist = dB; edgeUx =  0; edgeUy =  1; }
+
+        // Punto de impacto: justo al lado opuesto del rival respecto al borde
+        const ipx = target.x - edgeUx * (PLAYER_RADIUS * 2 - 2);
+        const ipy = target.y - edgeUy * (PLAYER_RADIUS * 2 - 2);
+
+        for (const atk of players.blue) {
+            const dx = ipx - atk.x;
+            const dy = ipy - atk.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < 0.001) continue;
+            const ux = dx / dist, uy = dy / dist;
+            const dot = ux * edgeUx + uy * edgeUy;
+            if (dot < 0.30) continue;       // direccion contraria al empuje deseado
+            // Score: cerca, bien alineado, y rival ya cerca del borde (mas facil expulsarlo)
+            const score = dist - dot * 80 + edgeDist * 0.4;
+            candidates.push({ disc: atk, ux, uy, dist, dot, score });
+        }
+    }
+    if (!candidates.length) {
+        // Fallback: un disparo cualquiera hacia el centro
+        const atk = players.blue[0];
+        const dx = cxField - atk.x;
+        const dy = cyField - atk.y;
+        const m = Math.hypot(dx, dy) || 1;
+        return { disc: atk, vx: (dx / m) * MAX_VELOCITY * 0.6, vy: (dy / m) * MAX_VELOCITY * 0.6 };
+    }
+    candidates.sort((a, b) => a.score - b.score);
+    // En facil, ruido grande; en dificil, va a por el mejor
+    const pickIdx = aiLevel === 'easy'
+        ? Math.min(candidates.length - 1, Math.floor(Math.random() * 3))
+        : 0;
+    const c = candidates[pickIdx];
+    const power = aiLevel === 'easy' ? MAX_VELOCITY * 0.75 : MAX_VELOCITY;
+    const jitter = aiLevel === 'easy' ? 0.85 + Math.random() * 0.25 : 0.95 + Math.random() * 0.07;
+    return { disc: c.disc, vx: c.ux * power * jitter, vy: c.uy * power * jitter };
+}
+
 function aiDecide() {
+    const mode = GAME_MODES[currentMode];
+    if (mode && mode.isKnockout) return aiDecideKnockout();
     if (aiLevel === 'easy')   return aiDecideEasy();
     if (aiLevel === 'medium') return aiDecideMedium();
     return aiDecideHard();
@@ -3165,8 +3319,14 @@ function showMatchEnd(winner) {
         dom.matchEndWin.style.textShadow = `0 0 30px ${colorHex}`;
     }
 
-    dom.endScoreRed.textContent  = score.red;
-    dom.endScoreBlue.textContent = score.blue;
+    const _mode = GAME_MODES[currentMode];
+    if (_mode && _mode.isKnockout) {
+        dom.endScoreRed.textContent  = (players.red  || []).length;
+        dom.endScoreBlue.textContent = (players.blue || []).length;
+    } else {
+        dom.endScoreRed.textContent  = score.red;
+        dom.endScoreBlue.textContent = score.blue;
+    }
 
     dom.matchEnd.classList.add('visible');
 
