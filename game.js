@@ -100,6 +100,14 @@ const GAME_MODES = {
         ballCount: 0,
         isKnockout: true,
         goalsToWin: 999    // no se usa: el match end es por chapas
+    },
+    diana: {
+        label: 'DIANA',
+        description: 'En solitario: 5 disparos, marca gol en la zona de mas puntos',
+        emoji: '🎯',
+        isDiana: true,
+        attempts: 5,
+        goalsToWin: 999     // no se usa: el match end es por intentos
     }
 };
 
@@ -108,6 +116,11 @@ let currentMode = 'normal3';
 // Estado especifico del modo Tiro libre
 let freekickRound = 1;       // 1, 2, 3
 let freekickShots = 0;       // 0, 1, 2 (disparos completados en esta ronda)
+
+// Estado especifico del modo Diana
+let dianaAttempt = 0;        // 0..attempts-1
+let dianaScore   = 0;        // total acumulado
+let dianaZones   = null;     // array de { y0, y1, points } para puntuar el gol
 
 // Habilidad TURBO: 1 uso por equipo por partido. Multiplica velocidad del proximo disparo.
 const TURBO_MULTIPLIER = 1.40;
@@ -297,7 +310,8 @@ const TROPHIES = [
     { id: 'beat_marcos',   name: 'SEBO MASTER FUERA',   desc: 'Vence a Ketes (difícil)',       emoji: '⚔️' },
     { id: 'streak_3',      name: 'RACHA CALIENTE',      desc: '3 victorias seguidas',          emoji: '🔥' },
     { id: 'games_10',      name: 'VETERANO',            desc: '10 partidas jugadas',           emoji: '🎮' },
-    { id: 'games_50',      name: 'ADICTO',              desc: '50 partidas jugadas',           emoji: '🎯' }
+    { id: 'games_50',      name: 'ADICTO',              desc: '50 partidas jugadas',           emoji: '🎯' },
+    { id: 'diana_master',  name: 'DIANA EXPERTA',       desc: 'Suma 20+ pts en modo Diana',    emoji: '🎯' }
 ];
 
 function unlockTrophy(id) {
@@ -427,11 +441,22 @@ function updateUI() {
         // En Knockout el "marcador" muestra chapas restantes de cada equipo
         dom.scoreRed.textContent  = (players.red  || []).length;
         dom.scoreBlue.textContent = (players.blue || []).length;
+    } else if (mode && mode.isDiana) {
+        // En Diana el "rojo" muestra los puntos acumulados; el "azul" no aplica
+        dom.scoreRed.textContent  = dianaScore;
+        dom.scoreBlue.textContent = '–';
     } else {
         dom.scoreRed.textContent  = score.red;
         dom.scoreBlue.textContent = score.blue;
     }
 
+    if (mode && mode.isDiana) {
+        const total = mode.attempts || 5;
+        const remaining = total - dianaAttempt;
+        dom.hint.textContent = 'DIANA · intento ' + (dianaAttempt + 1) + '/' + total +
+            ' · puntos: ' + dianaScore + (remaining > 1 ? '' : ' · ULTIMO!');
+        return;
+    }
     if (net.mode === 'local') {
         if (currentBot) {
             // vs bot
@@ -771,6 +796,14 @@ document.addEventListener('click', (e) => {
 playLocalBtn.addEventListener('click', () => {
     net.mode = 'local';
     net.myTeam = 'red';
+    // Diana: solo, sin rival ni bot — arranca directo (sin pantalla de bot select)
+    const m = GAME_MODES[currentMode];
+    if (m && m.isDiana) {
+        currentBot = null;
+        opponentSkin = selectedSkin;
+        transitionToGame(() => startGame());
+        return;
+    }
     showBotSelect();
 });
 
@@ -1096,9 +1129,10 @@ function create() {
     // En Knockout no hay paredes (las chapas pueden salir y desaparecer) ni porterias ni balon.
     if (!mode.isKnockout) {
         buildTopBottomWalls(this);
-        buildGoal(this, 'left');
+        // En Diana solo hay porteria derecha (objetivo)
+        if (!mode.isDiana) buildGoal(this, 'left');
         buildGoal(this, 'right');
-        drawGoalDecor(this, 'left');
+        if (!mode.isDiana) drawGoalDecor(this, 'left');
         drawGoalDecor(this, 'right');
     }
 
@@ -1113,6 +1147,12 @@ function create() {
         balls = [];
         ball = null;
         discs = [...players.red, ...players.blue];
+    } else if (mode.isDiana) {
+        dianaAttempt = 0;
+        dianaScore = 0;
+        dianaZones = buildDianaZones();
+        drawDianaZones(this);
+        spawnDianaAttempt(this);
     } else {
         spawnTeam(this, 'red');
         spawnTeam(this, 'blue');
@@ -1240,6 +1280,14 @@ function updatePlayerInfo() {
     paintMiniAvatar(redCanvas,  skinFor('red'),  '#ff5b5b');
     paintMiniAvatar(blueCanvas, skinFor('blue'), '#5b9eff');
 
+    const _mode = GAME_MODES[currentMode];
+    if (_mode && _mode.isDiana) {
+        redName.textContent  = PLAYER_LABELS[selectedSkin] || 'Tú';
+        blueName.textContent = 'PORTERIA';
+        redTag.textContent   = '';
+        blueTag.textContent  = '🎯';
+        return;
+    }
     if (net.mode === 'local') {
         redName.textContent  = PLAYER_LABELS[selectedSkin] || 'Tú';
         blueName.textContent = currentBot ? currentBot.displayName : (PLAYER_LABELS[opponentSkin] || 'Rival');
@@ -1285,6 +1333,24 @@ function update(time) {
         }
 
         const mode = GAME_MODES[currentMode] || GAME_MODES.normal3;
+
+        // === Modo Diana: 5 intentos en solitario, suma puntos por zona ===
+        if (mode.isDiana) {
+            pendingGoal = null;
+            selectedDisc = null;
+            activeTrail = null;
+            trailGfx.clear();
+            dianaAttempt++;
+            updateUI();
+            if (dianaAttempt >= (mode.attempts || 5)) {
+                setState('MATCH_END');
+                showDianaEnd();
+            } else {
+                spawnDianaAttempt(phaserScene);
+                setState('WAITING_FOR_INPUT');
+            }
+            return;
+        }
 
         // === Modo Knockout: gana el equipo que conserve chapas ===
         if (mode.isKnockout) {
@@ -2203,6 +2269,89 @@ function spawnFreekickRound(scene, attacker, round) {
     currentTeam = attacker;
 }
 
+// === Modo DIANA ===
+// Zonas verticales del hueco de porteria con sus puntos (esquinas valen mas).
+function buildDianaZones() {
+    const top    = FIELD_H / 2 - GOAL_HALF;
+    const bottom = FIELD_H / 2 + GOAL_HALF;
+    const span = bottom - top;
+    return [
+        { y0: top,                y1: top + span * 0.22, points: 5 },     // esquina alta
+        { y0: top + span * 0.22,  y1: top + span * 0.40, points: 3 },
+        { y0: top + span * 0.40,  y1: top + span * 0.60, points: 1 },     // centro (portero)
+        { y0: top + span * 0.60,  y1: top + span * 0.78, points: 3 },
+        { y0: top + span * 0.78,  y1: bottom,            points: 5 }      // esquina baja
+    ];
+}
+
+function pointsForBallY(y) {
+    if (!dianaZones) return 1;
+    for (const z of dianaZones) {
+        if (y >= z.y0 && y <= z.y1) return z.points;
+    }
+    // Si entra justo en el limite, lo asignamos al mas cercano
+    if (y < dianaZones[0].y0) return dianaZones[0].points;
+    return dianaZones[dianaZones.length - 1].points;
+}
+
+// Configura el campo para un intento de Diana: 1 chapa atacante (rojo, equipo del jugador)
+// y 1 balon, sin rivales, lanzamiento desde la izquierda hacia la porteria derecha.
+function spawnDianaAttempt(scene) {
+    destroyAllDiscs();
+    const Body = Phaser.Physics.Matter.Matter.Body;
+    const innerW = FIELD_W - FIELD_PAD_X * 2;
+    const innerH = FIELD_H - FIELD_PAD_Y * 2;
+    const fyMid = FIELD_PAD_Y + innerH * 0.50;
+
+    // Posicion atacante: cerca del lateral izquierdo, pero la y la varia un poco para que
+    // no sea siempre el mismo angulo (anade dificultad y variedad)
+    const atkFx = 0.18;
+    const atkFy = 0.30 + Math.random() * 0.40;     // entre 0.30 y 0.70
+    const atkX  = FIELD_PAD_X + innerW * atkFx;
+    const atkY  = FIELD_PAD_Y + innerH * atkFy;
+    const atk = createDisc(scene, atkX, atkY, PLAYER_RADIUS, 'disc-red', PLAYER_MASS, FRICTION_AIR_PLAYER, 'player');
+    atk.team = 'red';
+    atk.role = 'atk';
+    players.red.push(atk);
+    initialPositions.set(atk, { x: atkX, y: atkY });
+
+    // Balon en el centro vertical, ligeramente delante del atacante
+    spawnBalls(scene, 1);
+    const ballFx = 0.32;
+    const ballX = FIELD_PAD_X + innerW * ballFx;
+    Body.setPosition(ball.body, { x: ballX, y: fyMid });
+    initialPositions.set(ball, { x: ballX, y: fyMid });
+
+    discs = [...players.red, ...balls];
+    currentTeam = 'red';
+}
+
+// Pinta las zonas de puntos sobre el hueco de la porteria derecha (dentro del marco)
+function drawDianaZones(scene) {
+    if (!dianaZones) return;
+    const g = scene.add.graphics().setDepth(8);
+    const xL = FIELD_W - FIELD_PAD_X;             // borde de la portería derecha (entrada)
+    const xR = xL + GOAL_DEPTH - 4;
+    for (const z of dianaZones) {
+        // Color segun puntos: 5 oro, 3 plata, 1 bronce
+        let color, label;
+        if (z.points === 5)      { color = 0xffd24a; label = '5'; }
+        else if (z.points === 3) { color = 0xc8d6dd; label = '3'; }
+        else                     { color = 0xc88a3c; label = '1'; }
+        g.fillStyle(color, 0.30);
+        g.fillRect(xL, z.y0, xR - xL, z.y1 - z.y0);
+        g.lineStyle(2, color, 0.85);
+        g.strokeRect(xL, z.y0, xR - xL, z.y1 - z.y0);
+        const tx = xL + (xR - xL) / 2;
+        const ty = (z.y0 + z.y1) / 2;
+        scene.add.text(tx, ty, label, {
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '22px',
+            color: '#ffffff'
+        }).setOrigin(0.5).setDepth(9);
+    }
+}
+
 function spawnBalls(scene, count) {
     balls = [];
     if (count <= 1) {
@@ -2462,14 +2611,47 @@ function setupWallBounceCorrection(scene) {
 function setupGoalDetection(scene) {
     scene.matter.world.on('collisionstart', (event) => {
         if (pendingGoal) return;
+        const mode = GAME_MODES[currentMode];
+        const isDiana = mode && mode.isDiana;
         for (const pair of event.pairs) {
             const labels = [pair.bodyA.label, pair.bodyB.label];
             if (!labels.includes('ball')) continue;
             let scoringSide = null;
             if (labels.includes('goal-left'))  { pendingGoal = 'blue'; scoringSide = 'left';  }
             else if (labels.includes('goal-right')) { pendingGoal = 'red';  scoringSide = 'right'; }
-            if (scoringSide) { triggerGoalEffects(scene, scoringSide); break; }
+            if (scoringSide) {
+                if (isDiana && scoringSide === 'right' && ball) {
+                    // Calcular puntos por zona y acumular antes de los efectos
+                    const pts = pointsForBallY(ball.y);
+                    dianaScore += pts;
+                    showDianaPointsToast(scene, pts, ball.y);
+                }
+                triggerGoalEffects(scene, scoringSide);
+                break;
+            }
         }
+    });
+}
+
+// Toast efimero "+5", "+3", "+1" en la posicion del gol en Diana
+function showDianaPointsToast(scene, pts, atY) {
+    const x = FIELD_W - FIELD_PAD_X - 10;
+    const colorHex = pts === 5 ? '#ffd24a' : pts === 3 ? '#c8d6dd' : '#c88a3c';
+    const t = scene.add.text(x, atY, '+' + pts, {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '64px',
+        color: colorHex,
+        stroke: '#000',
+        strokeThickness: 6
+    }).setOrigin(0.5).setDepth(20);
+    scene.tweens.add({
+        targets: t,
+        y: atY - 90,
+        alpha: 0,
+        scale: 1.3,
+        duration: 1100,
+        ease: 'Cubic.Out',
+        onComplete: () => t.destroy()
     });
 }
 
@@ -3348,6 +3530,39 @@ function showMatchEnd(winner) {
     spawnMatchEndConfetti(partyEmojis, 70, 0);
     spawnMatchEndConfetti(partyEmojis, 50, 700);
     spawnMatchEndConfetti(partyEmojis, 40, 1500);
+}
+
+// Match-end exclusivo de DIANA: muestra puntuacion total y un mensaje segun rango.
+function showDianaEnd() {
+    const goalPopup = document.getElementById('goal-popup');
+    if (goalPopup) goalPopup.classList.add('hidden');
+
+    const total = dianaScore;
+    let title;
+    if (total >= 22)      title = '¡PUNTERIA DIVINA! ' + total + ' PTS';
+    else if (total >= 15) title = 'GRAN TIRADA: ' + total + ' PTS';
+    else if (total >= 8)  title = 'DECENTE: ' + total + ' PTS';
+    else if (total >= 3)  title = 'PUEDES MEJORAR: ' + total + ' PTS';
+    else                  title = 'VAYA PUNTERIA... ' + total + ' PTS';
+
+    dom.matchEndWin.textContent = title;
+    dom.matchEndWin.style.color = '#ffd24a';
+    dom.matchEndWin.style.textShadow = '0 0 30px rgba(255,210,80,0.7)';
+    dom.endScoreRed.textContent  = total;
+    dom.endScoreBlue.textContent = '0';
+    dom.matchEnd.classList.add('visible');
+
+    // Persistir puntuacion (mejor diana, sin contar como partida normal)
+    try {
+        persistState.bestDiana = Math.max(persistState.bestDiana || 0, total);
+        persistState.dianaPlays = (persistState.dianaPlays || 0) + 1;
+        saveState();
+        if (total >= 20) unlockTrophy('diana_master');
+    } catch (_) {}
+
+    const partyEmojis = ['🎯', '🏆', '✨', '⭐', '🎉'];
+    spawnMatchEndConfetti(partyEmojis, 60, 0);
+    spawnMatchEndConfetti(partyEmojis, 40, 800);
 }
 
 function spawnMatchEndConfetti(emojis, count, delay) {
