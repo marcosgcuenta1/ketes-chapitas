@@ -1316,6 +1316,7 @@ function update(time) {
     updateShadows();
     updateTurboButton();
     updateKnockoutEliminations();
+    updateDynamicCamera();
 
     if (gameState !== 'PHYSICS_SIMULATION') return;
     if (awaitingSync) return;
@@ -2538,6 +2539,54 @@ function updateShadows() {
             d.shadowSprite.y = d.y + (d.shadowOffsetY || 6);
         }
     }
+}
+
+// Camara dinamica: zoom suave y leve panning hacia el "centro de accion"
+// (media de posiciones del balon y la chapa mas rapida) cuando hay simulacion.
+// En reposo vuelve a 1.0x y centrada.
+function updateDynamicCamera() {
+    if (!phaserScene) return;
+    const cam = phaserScene.cameras && phaserScene.cameras.main;
+    if (!cam) return;
+
+    // Velocidad maxima + posicion ponderada
+    let maxSpeed = 0;
+    let actX = FIELD_W / 2, actY = FIELD_H / 2;
+    if (ball && ball.body) {
+        actX = ball.x;
+        actY = ball.y;
+        maxSpeed = Math.max(maxSpeed, Math.hypot(ball.body.velocity.x, ball.body.velocity.y));
+    } else if (discs.length) {
+        // Sin balon (knockout): usa la chapa mas rapida como punto de interes
+        let fastest = null, fastestSpeed = 0;
+        for (const d of discs) {
+            const sp = Math.hypot(d.body.velocity.x, d.body.velocity.y);
+            if (sp > fastestSpeed) { fastestSpeed = sp; fastest = d; }
+        }
+        if (fastest) { actX = fastest.x; actY = fastest.y; maxSpeed = fastestSpeed; }
+    }
+    for (const d of discs) {
+        const sp = Math.hypot(d.body.velocity.x, d.body.velocity.y);
+        if (sp > maxSpeed) maxSpeed = sp;
+    }
+
+    // Zoom: 1.0 reposo, hasta 1.06 a alta velocidad
+    const speedNorm = Math.min(maxSpeed / 28, 1);
+    const targetZoom = 1.0 + speedNorm * 0.06;
+    const curZoom = cam.zoom || 1;
+    cam.setZoom(curZoom + (targetZoom - curZoom) * 0.08);
+
+    // Panning suave hacia el punto de accion, con desviacion maxima muy contenida
+    const cx = FIELD_W / 2, cy = FIELD_H / 2;
+    const pullX = (actX - cx) * 0.10 * speedNorm;       // max 10% de la distancia, solo si hay velocidad
+    const pullY = (actY - cy) * 0.10 * speedNorm;
+    const targetSx = cx + pullX;
+    const targetSy = cy + pullY;
+    const curSx = cam.scrollX + cam.width / 2 / cam.zoom;
+    const curSy = cam.scrollY + cam.height / 2 / cam.zoom;
+    const newSx = curSx + (targetSx - curSx) * 0.06;
+    const newSy = curSy + (targetSy - curSy) * 0.06;
+    cam.centerOn(newSx, newSy);
 }
 
 function updateBallSpin() {
