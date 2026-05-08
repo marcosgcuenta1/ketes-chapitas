@@ -776,6 +776,57 @@
             cursor: not-allowed;
         }
 
+        /* Popup de aviso al armar el TURBO */
+        .turbo-popup {
+            position: fixed;
+            top: 22%;
+            left: 50%;
+            transform: translateX(-50%) scale(0.85);
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            padding: 18px 28px;
+            background: linear-gradient(135deg, rgba(40,18,4,0.95), rgba(70,30,8,0.92));
+            border: 2px solid rgba(255, 200, 60, 0.85);
+            border-radius: 18px;
+            box-shadow: 0 0 50px rgba(255,180,40,0.65), 0 12px 30px rgba(0,0,0,0.6);
+            z-index: 50;
+            font-family: 'Orbitron', sans-serif;
+            color: #fff;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 220ms ease, transform 360ms cubic-bezier(.2,.9,.3,1.4);
+        }
+        .turbo-popup.visible {
+            opacity: 1;
+            transform: translateX(-50%) scale(1);
+        }
+        .turbo-popup.hidden { display: none; }
+        .turbo-popup-icon {
+            font-size: 56px;
+            line-height: 1;
+            filter: drop-shadow(0 0 14px rgba(255,200,60,0.85));
+            animation: turbo-popup-spin 1.6s ease-in-out infinite;
+        }
+        @keyframes turbo-popup-spin {
+            0%, 100% { transform: rotate(-6deg) scale(1); }
+            50%      { transform: rotate(6deg)  scale(1.08); }
+        }
+        .turbo-popup-text { display: flex; flex-direction: column; gap: 4px; }
+        .turbo-popup-title {
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: 3px;
+            color: #ffd87a;
+            text-shadow: 0 0 14px rgba(255,200,60,0.6);
+        }
+        .turbo-popup-desc {
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 1.2px;
+            opacity: 0.9;
+        }
+
         /* Indicadores de turbo en el marcador (uno por equipo) */
         .turbo-indicator {
             display: inline-flex;
@@ -1807,6 +1858,15 @@
 
     <!-- Toasts de trofeos desbloqueados -->
     <div id="trophy-toasts" class="trophy-toasts"></div>
+
+    <!-- Popup de TURBO al armarlo -->
+    <div id="turbo-popup" class="turbo-popup hidden">
+        <span class="turbo-popup-icon" id="turbo-popup-icon">⚡</span>
+        <div class="turbo-popup-text">
+            <span class="turbo-popup-title">TURBO ACTIVADO</span>
+            <span class="turbo-popup-desc" id="turbo-popup-desc">Próximo disparo +40% potencia</span>
+        </div>
+    </div>
 
     <!-- Tutorial de bienvenida (solo primera visita) -->
     <div id="tutorial-overlay" class="tutorial-overlay hidden">

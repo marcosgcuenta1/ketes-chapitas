@@ -801,11 +801,51 @@ function updateTurboButton() {
     turboBtn.classList.remove('hidden', 'used');
     turboBtn.classList.toggle('armed', abilityArmed);
 }
+// Frase descriptiva del turbo, una por skin (matchea el logo)
+const PLAYER_TURBO_DESCS = [
+    'EL DRAGÓN ESCUPE FUEGO · próximo disparo +40% potencia',
+    'RUGIDO DE LEÓN · próximo disparo +40% potencia',
+    'AULLIDO DEL LOBO · próximo disparo +40% potencia',
+    'VOMITAZO LETAL · próximo disparo +40% potencia',
+    'PICADA DEL ÁGUILA · próximo disparo +40% potencia',
+    'GOLPE DE REY · próximo disparo +40% potencia',
+    'MODO ROBOT · próximo disparo +40% potencia',
+    'INFIERNO ARDIENTE · próximo disparo +40% potencia',
+    'CARGA CON ESPADAS · próximo disparo +40% potencia',
+    'RAYO ELÉCTRICO · próximo disparo +40% potencia'
+];
+const turboPopupEl     = document.getElementById('turbo-popup');
+const turboPopupIconEl = document.getElementById('turbo-popup-icon');
+const turboPopupDescEl = document.getElementById('turbo-popup-desc');
+let turboPopupTimer = null;
+function showTurboPopup(team) {
+    if (!turboPopupEl) return;
+    const skin = skinFor(team);
+    if (turboPopupIconEl) turboPopupIconEl.textContent = PLAYER_TURBO_ICONS[skin] || '⚡';
+    if (turboPopupDescEl) turboPopupDescEl.textContent = PLAYER_TURBO_DESCS[skin] || 'Próximo disparo +40% potencia';
+    turboPopupEl.classList.remove('hidden');
+    // Forzar reflow para que la animacion arranque
+    void turboPopupEl.offsetWidth;
+    turboPopupEl.classList.add('visible');
+    if (turboPopupTimer) clearTimeout(turboPopupTimer);
+    turboPopupTimer = setTimeout(() => {
+        turboPopupEl.classList.remove('visible');
+        setTimeout(() => turboPopupEl.classList.add('hidden'), 240);
+    }, 1600);
+}
+function hideTurboPopup() {
+    if (!turboPopupEl) return;
+    if (turboPopupTimer) { clearTimeout(turboPopupTimer); turboPopupTimer = null; }
+    turboPopupEl.classList.remove('visible');
+    setTimeout(() => turboPopupEl.classList.add('hidden'), 240);
+}
+
 if (turboBtn) {
     turboBtn.addEventListener('click', () => {
         const myTeam = (net.mode === 'local' && !currentBot) ? currentTeam : (net.myTeam || 'red');
         if (abilityUsed[myTeam]) return;
         abilityArmed = !abilityArmed;
+        if (abilityArmed) showTurboPopup(myTeam); else hideTurboPopup();
         updateTurboButton();
     });
 }
@@ -3129,6 +3169,7 @@ function setupInput(scene) {
             const turboTeam = (net.mode === 'local' && !currentBot) ? currentTeam : (net.myTeam || 'red');
             abilityUsed[turboTeam] = true;
             abilityArmed = false;
+            hideTurboPopup();
             // pequeño feedback sonoro propio del boost
             playUiClick();
         }
