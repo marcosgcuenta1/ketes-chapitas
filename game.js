@@ -2013,6 +2013,7 @@ function triggerGoalEffects(scene, side) {
     scene.cameras.main.shake(280, 0.013);
     if (goalNets[side]) goalNets[side].shakeUntil = scene.time.now + 350;
     playGoalSound();
+    triggerSlowMo(scene, 0.30, 1200);    // bullet-time del gol
     // Si este gol va a terminar el partido, NO disparamos el popup GOOL+frase
     // (se solaparia con el match end). pendingGoal vale 'red' o 'blue'.
     const willEndMatch = (score[pendingGoal] + 1) >= goalsToWin;
@@ -2040,6 +2041,19 @@ const GOAL_INSULTS = [
 
 function pickGoalInsult() {
     return GOAL_INSULTS[Math.floor(Math.random() * GOAL_INSULTS.length)];
+}
+
+// Slow-motion temporal del motor de fisica (efecto "bullet time" para goles)
+let __slowMoTimer = null;
+function triggerSlowMo(scene, scale, durationMs) {
+    const engine = scene && scene.matter && scene.matter.world && scene.matter.world.engine;
+    if (!engine || !engine.timing) return;
+    engine.timing.timeScale = scale;
+    if (__slowMoTimer) clearTimeout(__slowMoTimer);
+    __slowMoTimer = setTimeout(() => {
+        if (engine.timing) engine.timing.timeScale = 1.0;
+        __slowMoTimer = null;
+    }, durationMs);
 }
 
 function showGoalPopup(scoringTeam) {
