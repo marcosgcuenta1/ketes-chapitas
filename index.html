@@ -727,34 +727,76 @@
 
         .turbo-btn {
             position: absolute;
-            bottom: 90px; right: 28px;
-            background: linear-gradient(135deg, rgba(255,200,40,0.18), rgba(255,90,40,0.18));
-            border: 1px solid rgba(255,200,40,0.55);
+            bottom: 14px; left: 14px;
+            background: linear-gradient(135deg, rgba(255,200,40,0.22), rgba(255,90,40,0.22));
+            border: 2px solid rgba(255,200,40,0.7);
             color: #fff;
             font-family: 'Orbitron', sans-serif;
             font-weight: 800;
-            font-size: 14px;
-            letter-spacing: 3px;
-            padding: 14px 22px;
-            border-radius: 999px;
+            font-size: 12px;
+            letter-spacing: 2px;
+            padding: 10px 14px 10px 12px;
+            border-radius: 16px;
             cursor: pointer;
-            box-shadow: 0 0 28px rgba(255,180,40,0.35), 0 8px 22px rgba(0,0,0,0.55);
+            box-shadow: 0 0 22px rgba(255,180,40,0.45), 0 6px 16px rgba(0,0,0,0.55);
             transition: all 180ms ease;
             z-index: 11;
+            display: flex;
+            align-items: center;
+            gap: 10px;
             animation: turbo-pulse 1.6s ease-in-out infinite;
         }
+        .turbo-btn .turbo-icon {
+            font-size: 26px;
+            line-height: 1;
+            filter: drop-shadow(0 0 6px rgba(255,200,40,0.7));
+        }
+        .turbo-btn .turbo-label {
+            font-weight: 800;
+        }
         .turbo-btn:hover {
-            background: linear-gradient(135deg, rgba(255,200,40,0.30), rgba(255,90,40,0.30));
-            border-color: rgba(255,200,40,0.85);
+            background: linear-gradient(135deg, rgba(255,200,40,0.35), rgba(255,90,40,0.35));
+            border-color: rgba(255,200,40,0.95);
             transform: scale(1.06);
-            box-shadow: 0 0 38px rgba(255,180,40,0.55), 0 10px 28px rgba(0,0,0,0.6);
+            box-shadow: 0 0 32px rgba(255,180,40,0.65), 0 8px 20px rgba(0,0,0,0.6);
         }
         .turbo-btn.hidden { display: none; }
         .turbo-btn.armed {
-            background: linear-gradient(135deg, rgba(255,40,40,0.45), rgba(255,180,0,0.45));
+            background: linear-gradient(135deg, rgba(255,40,40,0.5), rgba(255,180,0,0.5));
             border-color: #fff;
             color: #fff;
             animation: turbo-pulse-armed 0.6s ease-in-out infinite;
+        }
+        /* Estado "usado": apagado (visible en marcador, no aplica al boton in-game porque
+           cuando esta usado el boton se oculta via .hidden). */
+        .turbo-btn.used {
+            opacity: 0.40;
+            filter: grayscale(0.85);
+            animation: none;
+            cursor: not-allowed;
+        }
+
+        /* Indicadores de turbo en el marcador (uno por equipo) */
+        .turbo-indicator {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px; height: 28px;
+            margin: 0 6px;
+            border-radius: 50%;
+            background: rgba(255,200,40,0.18);
+            border: 1.5px solid rgba(255,200,40,0.65);
+            font-size: 16px;
+            line-height: 1;
+            box-shadow: 0 0 14px rgba(255,180,40,0.55);
+            transition: all 240ms ease;
+        }
+        .turbo-indicator.used {
+            opacity: 0.32;
+            filter: grayscale(0.9);
+            box-shadow: none;
+            border-color: rgba(120,120,120,0.5);
+            background: rgba(80,80,80,0.18);
         }
         @keyframes turbo-pulse {
             0%, 100% { box-shadow: 0 0 24px rgba(255,180,40,0.30), 0 8px 22px rgba(0,0,0,0.55); }
@@ -1675,8 +1717,11 @@
     <div id="game-screen" class="game-screen hidden">
         <button id="exit-match-btn" class="exit-btn" title="Volver al menú">SALIR</button>
         <button id="sound-btn" class="sound-btn" title="Silenciar / activar sonido" aria-label="Sonido">🔊</button>
-        <button id="turbo-btn" class="turbo-btn hidden" title="Habilidad TURBO: próximo disparo +40% potencia">⚡ TURBO</button>
         <div class="game-area">
+            <button id="turbo-btn" class="turbo-btn hidden" title="Habilidad TURBO: próximo disparo +40% potencia">
+                <span class="turbo-icon" id="turbo-icon">⚡</span>
+                <span class="turbo-label">TURBO</span>
+            </button>
             <div class="hud-overlay">
                 <div class="scoreboard">
                     <div class="player-side player-side-left">
@@ -1687,9 +1732,11 @@
                         </div>
                     </div>
                     <div class="score-numbers">
+                        <span class="turbo-indicator" id="turbo-indicator-red" title="Turbo del rojo">⚡</span>
                         <span class="score-red"><span id="score-red">0</span></span>
                         <span class="separator">·</span>
                         <span class="score-blue"><span id="score-blue">0</span></span>
+                        <span class="turbo-indicator" id="turbo-indicator-blue" title="Turbo del azul">⚡</span>
                     </div>
                     <div class="player-side player-side-right">
                         <div class="player-info player-info-right">

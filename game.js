@@ -525,6 +525,8 @@ const PLAYER_LABELS = [
     'Queroooool',
     'Yaresito'
 ];
+// Logo de TURBO unico por skin: cada chapa tiene su sello
+const PLAYER_TURBO_ICONS = ['🐲', '🦁', '🐺', '🤮', '🦅', '👑', '🤖', '🔥', '⚔️', '⚡'];
 const AVATAR_COUNT = PLAYER_FILES.length;
 const AVATAR_IMAGES = new Array(AVATAR_COUNT).fill(null);
 let selectedSkin = 0;
@@ -755,8 +757,30 @@ trophiesScreen.addEventListener('click', (e) => {
 });
 
 // Habilidad TURBO
-const turboBtn = document.getElementById('turbo-btn');
+const turboBtn      = document.getElementById('turbo-btn');
+const turboIconEl   = document.getElementById('turbo-icon');
+const turboIndRedEl = document.getElementById('turbo-indicator-red');
+const turboIndBluEl = document.getElementById('turbo-indicator-blue');
+
+// Devuelve el emoji de turbo asociado a un equipo segun su skin
+function turboIconForTeam(team) {
+    return PLAYER_TURBO_ICONS[skinFor(team)] || '⚡';
+}
+
+// Refresca los dos indicadores del marcador (rojo / azul) con su logo y estado
+function updateTurboIndicators() {
+    if (turboIndRedEl) {
+        turboIndRedEl.textContent = turboIconForTeam('red');
+        turboIndRedEl.classList.toggle('used', !!abilityUsed.red);
+    }
+    if (turboIndBluEl) {
+        turboIndBluEl.textContent = turboIconForTeam('blue');
+        turboIndBluEl.classList.toggle('used', !!abilityUsed.blue);
+    }
+}
+
 function updateTurboButton() {
+    updateTurboIndicators();
     if (!turboBtn) return;
     const inMatch = !gameScreen.classList.contains('hidden') && phaserGame;
     if (!inMatch) { turboBtn.classList.add('hidden'); return; }
@@ -765,12 +789,16 @@ function updateTurboButton() {
         ? true
         : (currentTeam === (net.mode === 'local' ? 'red' : net.myTeam));
     const used = abilityUsed[myTeam];
+
+    // Logo del turbo segun el skin del equipo activo (cambia al alternar turnos en local PvP)
+    if (turboIconEl) turboIconEl.textContent = turboIconForTeam(myTeam);
+
     if (gameState !== 'WAITING_FOR_INPUT' || !isMyTurn || used) {
         turboBtn.classList.add('hidden');
         turboBtn.classList.remove('armed');
         return;
     }
-    turboBtn.classList.remove('hidden');
+    turboBtn.classList.remove('hidden', 'used');
     turboBtn.classList.toggle('armed', abilityArmed);
 }
 if (turboBtn) {
