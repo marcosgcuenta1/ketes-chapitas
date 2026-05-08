@@ -122,6 +122,17 @@ let dianaAttempt = 0;        // 0..attempts-1
 let dianaScore   = 0;        // total acumulado
 let dianaZones   = null;     // array de { y0, y1, points } para puntuar el gol
 
+// Clima / variantes de estadio. Modulan textura, overlay y particulas (lluvia/nieve).
+const WEATHERS = {
+    day:   { label: 'DIA',    overlay: null,                       drops: null  },
+    night: { label: 'NOCHE',  overlay: { color: 0x000033, alpha: 0.55 }, drops: null },
+    rain:  { label: 'LLUVIA', overlay: { color: 0x021428, alpha: 0.30 }, drops: 'rain' },
+    snow:  { label: 'NIEVE',  overlay: { color: 0xb0c8e0, alpha: 0.18 }, drops: 'snow' }
+};
+let currentWeather = 'day';
+let weatherDrops = [];
+let weatherGfx   = null;
+
 // Habilidad TURBO: 1 uso por equipo por partido. Multiplica velocidad del proximo disparo.
 const TURBO_MULTIPLIER = 1.40;
 let abilityUsed  = { red: false, blue: false };
@@ -792,6 +803,20 @@ document.addEventListener('click', (e) => {
     }
 }, true);
 
+// --- Selector de clima ---
+const weatherRow = document.getElementById('weather-row');
+if (weatherRow) {
+    weatherRow.addEventListener('click', (e) => {
+        const chip = e.target.closest('.weather-chip');
+        if (!chip) return;
+        const w = chip.dataset.weather;
+        if (!WEATHERS[w]) return;
+        currentWeather = w;
+        weatherRow.querySelectorAll('.weather-chip').forEach(c => c.classList.toggle('active', c === chip));
+        playUiClick();
+    });
+}
+
 // --- Modo local ---
 playLocalBtn.addEventListener('click', () => {
     net.mode = 'local';
@@ -1200,12 +1225,28 @@ function create() {
     setupImpactDetection(this);
 
     setupInput(this);
+    applyWeatherPhysics();
 
     updateUI();
     updatePlayerInfo();
 
     // Popup "VS" al inicio del partido
     triggerVsPopup();
+}
+
+// Modula la friccion del aire segun el clima: lluvia y nieve hacen las chapas mas
+// resbaladizas. Se llama tras crear los cuerpos.
+function applyWeatherPhysics() {
+    let mult = 1.0;
+    if (currentWeather === 'rain') mult = 0.65;
+    else if (currentWeather === 'snow') mult = 0.55;
+    if (mult === 1.0) return;
+    for (const d of discs) {
+        if (!d.body) continue;
+        const isBall = d.body.label === 'ball';
+        const base = isBall ? FRICTION_AIR_BALL : FRICTION_AIR_PLAYER;
+        d.body.frictionAir = base * mult;
+    }
 }
 
 function triggerVsPopup() {
@@ -1347,6 +1388,7 @@ function update(time) {
     updateTurboButton();
     updateKnockoutEliminations();
     updateDynamicCamera();
+    updateWeatherDrops(time);
 
     if (gameState !== 'PHYSICS_SIMULATION') return;
     if (awaitingSync) return;
@@ -1805,6 +1847,82 @@ function paintStands(ctx) {
 function drawStadium(scene) {
     scene.add.image(0, 0, 'grass').setOrigin(0, 0).setDepth(0);
     drawFieldLines(scene);
+    setupWeatherEffects(scene);
+}
+
+// Aplica los efectos visuales del clima seleccionado: tinte de pantalla y particulas.
+function setupWeatherEffects(scene) {
+    const w = WEATHERS[currentWeather] || WEATHERS.day;
+    weatherDrops = [];
+
+    // Tinte global (oscurece de noche, azulea con lluvia, blanquea con nieve)
+    if (w.overlay) {
+        const tint = scene.add.graphics().setDepth(2.5);
+        tint.fillStyle(w.overlay.color, w.overlay.alpha);
+        tint.fillRect(0, 0, FIELD_W, FIELD_H);
+
+        // Modo NOCHE: focos circulares simulando estadio iluminado
+        if (currentWeather === 'night') {
+            const lights = scene.add.graphics().setDepth(2.6).setBlendMode(Phaser.BlendModes.ADD);
+            const spots = [
+                { x: FIELD_W * 0.25, y: FIELD_H * 0.25 },
+                { x: FIELD_W * 0.75, y: FIELD_H * 0.25 },
+                { x: FIELD_W * 0.25, y: FIELD_H * 0.75 },
+                { x: FIELD_W * 0.75, y: FIELD_H * 0.75 }
+            ];
+            for (const s of spots) {
+                for (let i = 5; i >= 1; i--) {
+                    lights.fillStyle(0xffffcc, 0.05 * i);
+                    lights.fillCircle(s.x, s.y, 50 * i);
+                }
+            }
+        }
+    }
+
+    // Particulas (lluvia o nieve) animadas en cada frame
+    if (w.drops) {
+        const isRain = w.drops === 'rain';
+        const count  = isRain ? 110 : 90;
+        for (let i = 0; i < count; i++) {
+            weatherDrops.push({
+                x: Math.random() * FIELD_W,
+                y: Math.random() * FIELD_H,
+                speed:  isRain ? 9 + Math.random() * 8     : 1.4 + Math.random() * 1.4,
+                drift:  isRain ? -1.4                       : (Math.random() - 0.5) * 0.6,
+                length: isRain ? 12 + Math.random() * 8     : 0,
+                size:   isRain ? 0                          : 2 + Math.random() * 2,
+                phase:  Math.random() * Math.PI * 2
+            });
+        }
+        weatherGfx = scene.add.graphics().setDepth(22);
+    } else {
+        weatherGfx = null;
+    }
+}
+
+function updateWeatherDrops(time) {
+    if (!weatherGfx || !weatherDrops.length) return;
+    const w = WEATHERS[currentWeather];
+    if (!w || !w.drops) return;
+    const isRain = w.drops === 'rain';
+    weatherGfx.clear();
+    if (isRain) {
+        weatherGfx.lineStyle(1.4, 0xb0c8ff, 0.55);
+        for (const d of weatherDrops) {
+            d.y += d.speed;
+            d.x += d.drift;
+            if (d.y > FIELD_H + 20) { d.y = -20; d.x = Math.random() * FIELD_W; }
+            weatherGfx.lineBetween(d.x, d.y, d.x - d.drift * 4, d.y - d.length);
+        }
+    } else {
+        weatherGfx.fillStyle(0xffffff, 0.85);
+        for (const d of weatherDrops) {
+            d.y += d.speed;
+            d.x += d.drift + Math.sin((time + d.phase * 1000) * 0.002) * 0.4;
+            if (d.y > FIELD_H + 8) { d.y = -8; d.x = Math.random() * FIELD_W; }
+            weatherGfx.fillCircle(d.x, d.y, d.size);
+        }
+    }
 }
 
 function drawFieldLines(scene) {
@@ -2298,6 +2416,7 @@ function spawnFreekickRound(scene, attacker, round) {
 
     discs = [...players.red, ...players.blue, ...balls];
     currentTeam = attacker;
+    applyWeatherPhysics();
 }
 
 // === Modo DIANA ===
@@ -2355,6 +2474,7 @@ function spawnDianaAttempt(scene) {
 
     discs = [...players.red, ...balls];
     currentTeam = 'red';
+    applyWeatherPhysics();
 }
 
 // Pinta las zonas de puntos sobre el hueco de la porteria derecha (dentro del marco)

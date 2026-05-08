@@ -385,6 +385,38 @@
             margin-left: 6px;
         }
 
+        .weather-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .weather-chip {
+            background: rgba(255,255,255,0.06);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 14px;
+            padding: 8px 14px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: transform 0.12s ease, background 0.18s ease, border-color 0.18s ease;
+        }
+        .weather-chip:hover { transform: translateY(-2px); background: rgba(255,255,255,0.10); }
+        .weather-chip.active {
+            background: rgba(255, 216, 122, 0.18);
+            border-color: rgba(255, 216, 122, 0.7);
+            box-shadow: 0 0 14px rgba(255, 216, 122, 0.30);
+            color: #ffd87a;
+        }
+        .menu-card.compact .weather-row { display: none; }
+
         /* Modal flotante para sub-opciones de modo */
         .mode-modal {
             position: fixed; inset: 0;
@@ -1448,6 +1480,14 @@
                 </button>
             </div>
             <p class="mode-current">Modo actual: <span id="current-mode-name">A 3 GOLES</span></p>
+
+            <span class="picker-label">CLIMA / ESTADIO</span>
+            <div class="weather-row" id="weather-row">
+                <button class="weather-chip active" data-weather="day"   title="Día">☀️ <span>DIA</span></button>
+                <button class="weather-chip"        data-weather="night" title="Noche">🌙 <span>NOCHE</span></button>
+                <button class="weather-chip"        data-weather="rain"  title="Lluvia">🌧️ <span>LLUVIA</span></button>
+                <button class="weather-chip"        data-weather="snow"  title="Nieve">❄️ <span>NIEVE</span></button>
+            </div>
 
             <div class="mode-buttons">
                 <button id="play-btn-local" class="play-btn">JUGAR LOCAL</button>
