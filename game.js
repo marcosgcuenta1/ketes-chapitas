@@ -50,44 +50,55 @@ const FORMATION = [
 // Cada modo personaliza formacion, numero de balones, condicion de victoria, etc.
 // Los modos no incluidos heredan el comportamiento "normal".
 const GAME_MODES = {
-    normal: {
-        label: 'PARTIDO NORMAL',
-        description: '5 vs 5 clasico, gana quien llegue antes a los goles fijados',
+    normal3: {
+        label: 'A 3 GOLES',
+        description: 'Partido normal 5 vs 5 a 3 goles',
         emoji: '⚽',
-        teamSize: 5,
         formation: FORMATION,
         ballCount: 1,
-        usesGoalsToWin: true,
-        usesAi: true,
-        usesPvp: true
+        goalsToWin: 3
+    },
+    normal5: {
+        label: 'A 5 GOLES',
+        description: 'Partido normal 5 vs 5 a 5 goles',
+        emoji: '⚽',
+        formation: FORMATION,
+        ballCount: 1,
+        goalsToWin: 5
     },
     penaltis: {
-        label: 'PENALTIS',
-        description: '5 lanzamientos cada uno, 1 vs 1. Gana quien meta mas',
-        emoji: '🥅',
-        teamSize: 1,
-        formation: [{ role: 'atk', fx: 0.40, fy: 0.50 }],   // sola la chapa lanzadora
-        gkFormation: [{ role: 'gk', fx: 0.07, fy: 0.50 }],   // el rival es solo portero
+        label: '1 CHAPA VS 1 CHAPA',
+        description: 'Duelo a 1 chapa, gana quien llegue antes a 3 goles',
+        emoji: '⚔️',
+        formation: [{ role: 'atk', fx: 0.40, fy: 0.50 }],
         ballCount: 1,
-        shotsPerSide: 5,                                      // 5 disparos por jugador
-        usesGoalsToWin: false,
-        usesAi: true,
-        usesPvp: true
+        goalsToWin: 3
     },
     caos: {
         label: 'CAOS DOBLE BALÓN',
         description: '5 vs 5 con DOS balones a la vez. Locuuura',
         emoji: '🎱',
-        teamSize: 5,
         formation: FORMATION,
         ballCount: 2,
-        usesGoalsToWin: true,
-        usesAi: true,
-        usesPvp: true
+        goalsToWin: 3
+    },
+    freekick: {
+        label: 'TIRO LIBRE',
+        description: 'Tiro libre con barrera. 3 rondas con dificultad creciente (2, 3, 4 chapas)',
+        emoji: '🧱',
+        ballCount: 1,
+        isFreekick: true,
+        barriersByRound: [2, 3, 4],
+        rounds: 3,
+        goalsToWin: 999    // no se usa: el match end es por rondas, no por goles
     }
 };
 
-let currentMode = 'normal';
+let currentMode = 'normal3';
+
+// Estado especifico del modo Tiro libre
+let freekickRound = 1;       // 1, 2, 3
+let freekickShots = 0;       // 0, 1, 2 (disparos completados en esta ronda)
 
 const TEAM_COLORS = {
     red:  { fill: 0xcc1f1f },
@@ -95,6 +106,140 @@ const TEAM_COLORS = {
 };
 
 const PALETTE_CONFETTI = [0xff5050, 0x5090ff, 0xffd400, 0xff8a3d, 0x60d0ff, 0xffffff, 0x40e08a, 0xa040ff];
+
+// ================================================================
+// SONIDO (WebAudio API procedural, sin assets externos)
+// ================================================================
+let __audioCtx = null;
+let soundMuted = false;
+try { soundMuted = localStorage.getItem('chapitas:muted') === '1'; } catch (_) {}
+
+function getAudioCtx() {
+    if (__audioCtx) return __audioCtx;
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return null;
+    __audioCtx = new Ctor();
+    return __audioCtx;
+}
+
+function makeNoiseBuffer(ctx, dur, decay) {
+    const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+        const env = decay ? Math.pow(1 - i / len, decay) : 1;
+        data[i] = (Math.random() * 2 - 1) * env;
+    }
+    return buf;
+}
+
+function playImpact(intensity) {
+    if (soundMuted) return;
+    const ctx = getAudioCtx(); if (!ctx) return;
+    const t = ctx.currentTime;
+    const vol = Math.min(0.45, Math.max(0.05, (intensity || 5) * 0.035));
+    // Golpe seco (ruido blanco filtrado)
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.09, 2.5);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 800 + intensity * 50;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    noise.connect(lp).connect(g).connect(ctx.destination);
+    noise.start(t);
+    // Tono grave subrayando el impacto
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(60, t + 0.08);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(vol * 0.6, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    osc.connect(og).connect(ctx.destination);
+    osc.start(t); osc.stop(t + 0.09);
+}
+
+function playBounce(intensity) {
+    if (soundMuted) return;
+    const ctx = getAudioCtx(); if (!ctx) return;
+    const t = ctx.currentTime;
+    const vol = Math.min(0.30, Math.max(0.03, (intensity || 4) * 0.025));
+    // Tic agudo metalico
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(900 + Math.random() * 200, t);
+    osc.frequency.exponentialRampToValueAtTime(400, t + 0.05);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(t); osc.stop(t + 0.07);
+}
+
+function playGoalSound() {
+    if (soundMuted) return;
+    const ctx = getAudioCtx(); if (!ctx) return;
+    const t = ctx.currentTime;
+    // Pitido de gol (silbato sintetizado)
+    const w = ctx.createOscillator();
+    w.type = 'sine';
+    w.frequency.setValueAtTime(2200, t);
+    const wg = ctx.createGain();
+    wg.gain.setValueAtTime(0.18, t);
+    wg.gain.exponentialRampToValueAtTime(0.001, t + 0.30);
+    w.connect(wg).connect(ctx.destination);
+    w.start(t); w.stop(t + 0.32);
+    // Acordes ascendentes triunfales
+    [0, 4, 7, 12].forEach((semis, idx) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.value = 220 * Math.pow(2, semis / 12);
+        const g = ctx.createGain();
+        const start = t + 0.18 + idx * 0.12;
+        g.gain.setValueAtTime(0, start);
+        g.gain.linearRampToValueAtTime(0.18, start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, start + 0.65);
+        osc.connect(g).connect(ctx.destination);
+        osc.start(start); osc.stop(start + 0.7);
+    });
+    // Rugido afición (ruido blanco con bandpass que sube y baja)
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 1.2, 0.5);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1200;
+    bp.Q.value = 0.8;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0, t + 0.20);
+    ng.gain.linearRampToValueAtTime(0.10, t + 0.45);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 1.40);
+    noise.connect(bp).connect(ng).connect(ctx.destination);
+    noise.start(t + 0.20);
+}
+
+function playUiClick() {
+    if (soundMuted) return;
+    const ctx = getAudioCtx(); if (!ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1200, t);
+    osc.frequency.exponentialRampToValueAtTime(600, t + 0.06);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.10, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(t); osc.stop(t + 0.08);
+}
+
+function setMuted(value) {
+    soundMuted = !!value;
+    try { localStorage.setItem('chapitas:muted', soundMuted ? '1' : '0'); } catch (_) {}
+    const btn = document.getElementById('sound-btn');
+    if (btn) btn.textContent = soundMuted ? '🔇' : '🔊';
+}
 
 // ================================================================
 // ESTADO
@@ -191,7 +336,6 @@ const menuCard   = document.getElementById('menu-card');
 const gameScreen = document.getElementById('game-screen');
 const fade       = document.getElementById('fade');
 const avatarsEl  = document.getElementById('avatars');
-const goalsToggle = document.getElementById('goals-toggle');
 
 const playLocalBtn = document.getElementById('play-btn-local');
 const playHostBtn  = document.getElementById('play-btn-host');
@@ -213,7 +357,7 @@ const PLAYER_LABELS = [
     'Cesar "Madman"',
     'Odlera',
     'Maverick',
-    'Van Buckemer',
+    'Van Bukemer',
     'Ketes',
     'Martinator',
     'Nacho "El Loco"',
@@ -354,55 +498,80 @@ let GOAL_IMG = null;
     tryNext();
 })();
 
-goalsToggle.addEventListener('click', (e) => {
-    const target = e.target.closest('.goal-opt');
-    if (!target) return;
-    goalsToggle.querySelectorAll('.goal-opt').forEach(b => b.classList.remove('active'));
-    target.classList.add('active');
-    goalsToWin = parseInt(target.dataset.goals);
+// Selector de modo: dos cards que abren modales. El modo elegido se muestra debajo.
+const modeBigRow       = document.getElementById('mode-bigrow');
+const currentModeName  = document.getElementById('current-mode-name');
+const modalNormal      = document.getElementById('modal-normal');
+const modalOther       = document.getElementById('modal-other');
+
+function updateModeUI() {
+    const m = GAME_MODES[currentMode];
+    currentModeName.textContent = (m && m.label) ? m.label : '—';
+}
+
+modeBigRow.addEventListener('click', (e) => {
+    const btn = e.target.closest('.mode-big');
+    if (!btn) return;
+    if (btn.dataset.group === 'normal') modalNormal.classList.remove('hidden');
+    else                                  modalOther.classList.remove('hidden');
 });
 
-// La eleccion de IA se hace en la pantalla bot-select (ver mas abajo)
+[modalNormal, modalOther].forEach(modal => {
+    modal.addEventListener('click', (e) => {
+        // Click sobre el fondo del modal cierra
+        if (e.target === modal) { modal.classList.add('hidden'); return; }
+        const closeBtn = e.target.closest('[data-modal-close]');
+        if (closeBtn) { document.getElementById(closeBtn.dataset.modalClose).classList.add('hidden'); return; }
+        const opt = e.target.closest('.mode-modal-opt');
+        if (!opt) return;
+        if (opt.classList.contains('disabled')) return;
+        const mode = opt.dataset.mode;
+        if (!GAME_MODES[mode]) return;
+        currentMode = mode;
+        goalsToWin  = GAME_MODES[mode].goalsToWin || 3;
+        modal.classList.add('hidden');
+        updateModeUI();
+    });
+});
+
+updateModeUI();
 
 dom.backToMenu.addEventListener('click', returnToMenu);
 
 document.getElementById('exit-match-btn').addEventListener('click', () => {
+    playUiClick();
     const msg = net.mode === 'local'
         ? '¿Volver al menú? Se perderá la partida actual.'
         : '¿Salir al menú? La conexión con el rival se cerrará.';
     if (window.confirm(msg)) returnToMenu();
 });
 
+// Toggle de sonido
+const soundBtn = document.getElementById('sound-btn');
+if (soundBtn) {
+    soundBtn.textContent = soundMuted ? '🔇' : '🔊';
+    soundBtn.addEventListener('click', () => {
+        setMuted(!soundMuted);
+        if (!soundMuted) playUiClick();
+    });
+}
+
+// Click sonoro en botones principales del menu (delegado)
+document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('#play-btn-local, #play-btn-host, #play-btn-join, #join-connect-btn, ' +
+                   '.bot-option, #pvp-btn, .mode-big, .mode-modal-opt, ' +
+                   '.back-btn, .copy-btn, .play-btn, #back-to-menu-btn')) {
+        playUiClick();
+    }
+}, true);
+
 // --- Modo local ---
 playLocalBtn.addEventListener('click', () => {
     net.mode = 'local';
     net.myTeam = 'red';
-    showModeSelect();
-});
-
-// Selector de modo de juego (entre menu principal y bot select)
-const modeSelectEl  = document.getElementById('mode-select');
-const modeOptionsEl = document.getElementById('mode-options');
-
-function showModeSelect() {
-    menu.classList.add('hidden');
-    modeSelectEl.classList.remove('hidden');
-}
-
-modeOptionsEl.addEventListener('click', (e) => {
-    const btn = e.target.closest('.mode-option');
-    if (!btn) return;
-    if (btn.classList.contains('mode-option-disabled')) return;
-    const mode = btn.dataset.mode;
-    if (!GAME_MODES[mode]) return;
-    currentMode = mode;
-    modeSelectEl.classList.add('hidden');
     showBotSelect();
-});
-
-document.getElementById('mode-select-back').addEventListener('click', () => {
-    modeSelectEl.classList.add('hidden');
-    menu.classList.remove('hidden');
 });
 
 // --- Modo host ---
@@ -725,11 +894,18 @@ function create() {
     drawGoalDecor(this, 'left');
     drawGoalDecor(this, 'right');
 
-    spawnTeam(this, 'red');
-    spawnTeam(this, 'blue');
-    const mode = GAME_MODES[currentMode] || GAME_MODES.normal;
-    spawnBalls(this, mode.ballCount || 1);
-    discs = [...players.red, ...players.blue, ...balls];
+    const mode = GAME_MODES[currentMode] || GAME_MODES.normal3;
+    if (mode.isFreekick) {
+        // Tiro libre: configuracion especial con respawn por ronda
+        freekickRound = 1;
+        freekickShots = 0;
+        spawnFreekickRound(this, 'red', 1);
+    } else {
+        spawnTeam(this, 'red');
+        spawnTeam(this, 'blue');
+        spawnBalls(this, mode.ballCount || 1);
+        discs = [...players.red, ...players.blue, ...balls];
+    }
 
     createGoalParticles(this);
     trailGfx     = this.add.graphics().setDepth(8);
@@ -893,7 +1069,44 @@ function update(time) {
             return;
         }
 
-        // Host o local resuelve turno
+        const mode = GAME_MODES[currentMode] || GAME_MODES.normal3;
+
+        // === Modo Tiro libre: rondas con respawn ===
+        if (mode.isFreekick) {
+            if (pendingGoal) {
+                score[pendingGoal] += 1;
+                pendingGoal = null;
+            }
+            selectedDisc = null;
+            activeTrail = null;
+            trailGfx.clear();
+
+            freekickShots++;
+            if (freekickShots >= 2) {
+                freekickShots = 0;
+                freekickRound++;
+            }
+
+            if (freekickRound > 3) {
+                // Match end: gana quien tenga mas goles, o empate
+                let winner;
+                if (score.red > score.blue)       winner = 'red';
+                else if (score.blue > score.red)  winner = 'blue';
+                else                              winner = 'tie';
+                updateUI();
+                setState('MATCH_END');
+                showMatchEnd(winner);
+            } else {
+                const nextAttacker = currentTeam === 'red' ? 'blue' : 'red';
+                spawnFreekickRound(phaserScene, nextAttacker, freekickRound);
+                updateUI();
+                setState('WAITING_FOR_INPUT');
+                maybeStartAITurn();
+            }
+            return;
+        }
+
+        // === Modo normal/caos/penaltis: lógica habitual de gol/turno ===
         let winner = null;
         if (pendingGoal) {
             score[pendingGoal] += 1;
@@ -1620,6 +1833,91 @@ function spawnBall(scene) {
     spawnBalls(scene, 1);
 }
 
+// Destruye todos los discos (chapas + balones) y limpia las estructuras asociadas.
+// Lo usa el modo Tiro libre para reorganizar formaciones entre rondas.
+function destroyAllDiscs() {
+    for (const d of discs) {
+        if (d && d.shadowSprite) {
+            try { d.shadowSprite.destroy(); } catch (_) {}
+        }
+        if (d && d.destroy) {
+            try { d.destroy(); } catch (_) {}
+        }
+    }
+    discs = [];
+    players = { red: [], blue: [] };
+    balls = [];
+    ball = null;
+    initialPositions = new Map();
+}
+
+// Posiciones de defensores estaticos por ronda (lado defensor: derecha cuando rojo ataca).
+// Se espejan automaticamente cuando ataca azul.
+const FREEKICK_DEFENDERS = {
+    1: [
+        { fx: 0.62, fy: 0.32 },
+        { fx: 0.62, fy: 0.68 }
+    ],
+    2: [
+        { fx: 0.58, fy: 0.30 },
+        { fx: 0.58, fy: 0.70 },
+        { fx: 0.78, fy: 0.50 }
+    ],
+    3: [
+        { fx: 0.55, fy: 0.28 },
+        { fx: 0.55, fy: 0.72 },
+        { fx: 0.75, fy: 0.40 },
+        { fx: 0.75, fy: 0.60 }
+    ]
+};
+
+// Tiro libre: configura el campo para un disparo específico.
+// `attacker` es 'red' o 'blue' (quien lanza); `round` es 1, 2 o 3.
+function spawnFreekickRound(scene, attacker, round) {
+    destroyAllDiscs();
+    const Body = Phaser.Physics.Matter.Matter.Body;
+    const defender = attacker === 'red' ? 'blue' : 'red';
+    const innerW = FIELD_W - FIELD_PAD_X * 2;
+    const innerH = FIELD_H - FIELD_PAD_Y * 2;
+    const fyMid  = FIELD_PAD_Y + innerH * 0.50;
+
+    // Atacante (1 chapa en su mitad, separado del balon para tener espacio de slingshot)
+    const atkFx = attacker === 'red' ? 0.30 : 0.70;
+    const atkX  = FIELD_PAD_X + innerW * atkFx;
+    const atkTex = attacker === 'red' ? 'disc-red' : 'disc-blue';
+    const atk = createDisc(scene, atkX, fyMid, PLAYER_RADIUS, atkTex, PLAYER_MASS, FRICTION_AIR_PLAYER, 'player');
+    atk.team = attacker;
+    atk.role = 'atk';
+    players[attacker].push(atk);
+    initialPositions.set(atk, { x: atkX, y: fyMid });
+
+    // Defensores distribuidos por el campo (sin portero)
+    const defs = FREEKICK_DEFENDERS[Math.min(Math.max(round, 1), 3)];
+    const defTex = defender === 'red' ? 'disc-red' : 'disc-blue';
+    for (const slot of defs) {
+        const fx = attacker === 'red' ? slot.fx : (1 - slot.fx);   // espejo si ataca azul
+        const dx = FIELD_PAD_X + innerW * fx;
+        const dy = FIELD_PAD_Y + innerH * slot.fy;
+        const wall = createDisc(scene, dx, dy, PLAYER_RADIUS, defTex, PLAYER_MASS, FRICTION_AIR_PLAYER, 'player');
+        wall.team = defender;
+        wall.role = 'wall';
+        players[defender].push(wall);
+        initialPositions.set(wall, { x: dx, y: dy });
+        Body.setStatic(wall.body, true);
+    }
+
+    // Balon en posicion intermedia entre el atacante y el centro, con suficiente
+    // separacion para que el atacante haga slingshot real, no un toque pegado.
+    spawnBalls(scene, 1);
+    const ballFx = attacker === 'red' ? 0.43 : 0.57;
+    const ballX  = FIELD_PAD_X + innerW * ballFx;
+    Body.setPosition(ball.body, { x: ballX, y: fyMid });
+    initialPositions.set(ball, { x: ballX, y: fyMid });
+
+    discs = [...players.red, ...players.blue, ...balls];
+    currentTeam = attacker;
+}
+
 function spawnBalls(scene, count) {
     balls = [];
     if (count <= 1) {
@@ -1714,6 +2012,7 @@ function triggerGoalEffects(scene, side) {
     confettiEmitter.explode(140, cx, cy);
     scene.cameras.main.shake(280, 0.013);
     if (goalNets[side]) goalNets[side].shakeUntil = scene.time.now + 350;
+    playGoalSound();
     // Si este gol va a terminar el partido, NO disparamos el popup GOOL+frase
     // (se solaparia con el match end). pendingGoal vale 'red' o 'blue'.
     const willEndMatch = (score[pendingGoal] + 1) >= goalsToWin;
@@ -1855,6 +2154,8 @@ function setupWallBounceCorrection(scene) {
             const vx = hitV ? -v.x * RESTITUTION_WALL : v.x;
             const vy = hitH ? -v.y * RESTITUTION_WALL : v.y;
             Body.setVelocity(body, { x: vx, y: vy });
+            const speed = Math.hypot(v.x, v.y);
+            if (speed > 1.5) playBounce(speed);
         }
     });
 }
@@ -1875,6 +2176,20 @@ function setupGoalDetection(scene) {
 
 function setupImpactDetection(scene) {
     scene.matter.world.on('collisionstart', (event) => {
+        // Sonido de impacto (con cooldown propio para no saturar)
+        for (const pair of event.pairs) {
+            const a = pair.bodyA, b = pair.bodyB;
+            const aIsDisc = a.label === 'player' || a.label === 'ball';
+            const bIsDisc = b.label === 'player' || b.label === 'ball';
+            if (!aIsDisc || !bIsDisc) continue;
+            const speed = Math.max(
+                Math.hypot(a.velocity.x, a.velocity.y),
+                Math.hypot(b.velocity.x, b.velocity.y)
+            );
+            if (speed > 2) playImpact(speed);
+            break;
+        }
+        // Shake (con su propio cooldown)
         if (scene.time.now - lastImpactTime < IMPACT_SHAKE_COOLDOWN) return;
         for (const pair of event.pairs) {
             const a = pair.bodyA, b = pair.bodyB;
@@ -2285,7 +2600,7 @@ document.getElementById('pvp-btn').addEventListener('click', () => {
 
 document.getElementById('bot-select-back').addEventListener('click', () => {
     botSelectEl.classList.add('hidden');
-    showModeSelect();   // vuelve al selector de modo, no directo al menu
+    menu.classList.remove('hidden');
 });
 
 function chooseBot(botName) {
@@ -2619,15 +2934,20 @@ function showMatchEnd(winner) {
     const goalPopup = document.getElementById('goal-popup');
     if (goalPopup) goalPopup.classList.add('hidden');
 
-    const colorHex = winner === 'red'
-        ? hexNum(TEAM_COLORS.red.fill)
-        : hexNum(TEAM_COLORS.blue.fill);
-    const winnerName = getWinnerName(winner);
-    const loserName  = getLoserName(winner);
-
-    dom.matchEndWin.textContent = pickWinPhrase(winnerName, loserName);
-    dom.matchEndWin.style.color = colorHex;
-    dom.matchEndWin.style.textShadow = `0 0 30px ${colorHex}`;
+    if (winner === 'tie') {
+        dom.matchEndWin.textContent = 'EMPATE!!!';
+        dom.matchEndWin.style.color = '#ffd87a';
+        dom.matchEndWin.style.textShadow = '0 0 30px rgba(255,205,90,0.65)';
+    } else {
+        const colorHex = winner === 'red'
+            ? hexNum(TEAM_COLORS.red.fill)
+            : hexNum(TEAM_COLORS.blue.fill);
+        const winnerName = getWinnerName(winner);
+        const loserName  = getLoserName(winner);
+        dom.matchEndWin.textContent = pickWinPhrase(winnerName, loserName);
+        dom.matchEndWin.style.color = colorHex;
+        dom.matchEndWin.style.textShadow = `0 0 30px ${colorHex}`;
+    }
 
     dom.endScoreRed.textContent  = score.red;
     dom.endScoreBlue.textContent = score.blue;
@@ -2720,9 +3040,12 @@ function returnToMenu() {
         gameScreen.classList.add('hidden');
         botPopupEl.classList.add('hidden');
         botSelectEl.classList.add('hidden');
-        modeSelectEl.classList.add('hidden');
-        currentMode = 'normal';
         if (botPopupPart) botPopupPart.innerHTML = '';
+        currentMode   = 'normal3';
+        goalsToWin    = 3;
+        freekickRound = 1;
+        freekickShots = 0;
+        if (typeof updateModeUI === 'function') updateModeUI();
         menu.classList.remove('hidden');
         showPanel(null);
         dom.netBadge.classList.remove('visible', 'warning');
