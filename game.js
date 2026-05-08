@@ -100,6 +100,11 @@ let currentMode = 'normal3';
 let freekickRound = 1;       // 1, 2, 3
 let freekickShots = 0;       // 0, 1, 2 (disparos completados en esta ronda)
 
+// Habilidad TURBO: 1 uso por equipo por partido. Multiplica velocidad del proximo disparo.
+const TURBO_MULTIPLIER = 1.40;
+let abilityUsed  = { red: false, blue: false };
+let abilityArmed = false;     // si esta armada, el proximo disparo del equipo activo recibe el boost
+
 const TEAM_COLORS = {
     red:  { fill: 0xcc1f1f },
     blue: { fill: 0x2360c0 }
@@ -697,6 +702,34 @@ trophiesScreen.addEventListener('click', (e) => {
     if (e.target === trophiesScreen) trophiesScreen.classList.add('hidden');
 });
 
+// Habilidad TURBO
+const turboBtn = document.getElementById('turbo-btn');
+function updateTurboButton() {
+    if (!turboBtn) return;
+    const inMatch = !gameScreen.classList.contains('hidden') && phaserGame;
+    if (!inMatch) { turboBtn.classList.add('hidden'); return; }
+    const myTeam = (net.mode === 'local' && !currentBot) ? currentTeam : (net.myTeam || 'red');
+    const isMyTurn = (net.mode === 'local' && !currentBot)
+        ? true
+        : (currentTeam === (net.mode === 'local' ? 'red' : net.myTeam));
+    const used = abilityUsed[myTeam];
+    if (gameState !== 'WAITING_FOR_INPUT' || !isMyTurn || used) {
+        turboBtn.classList.add('hidden');
+        turboBtn.classList.remove('armed');
+        return;
+    }
+    turboBtn.classList.remove('hidden');
+    turboBtn.classList.toggle('armed', abilityArmed);
+}
+if (turboBtn) {
+    turboBtn.addEventListener('click', () => {
+        const myTeam = (net.mode === 'local' && !currentBot) ? currentTeam : (net.myTeam || 'red');
+        if (abilityUsed[myTeam]) return;
+        abilityArmed = !abilityArmed;
+        updateTurboButton();
+    });
+}
+
 // Toggle de sonido
 const soundBtn = document.getElementById('sound-btn');
 if (soundBtn) {
@@ -1024,6 +1057,9 @@ function buildSync() {
 // ================================================================
 function create() {
     phaserScene = this;
+    // Reset de habilidad por partida
+    abilityUsed = { red: false, blue: false };
+    abilityArmed = false;
 
     createGrassTexture(this);
     const redSkin  = skinFor('red');
@@ -1205,6 +1241,7 @@ function update(time) {
     updateTrail();
     updateBallSpin();
     updateShadows();
+    updateTurboButton();
 
     if (gameState !== 'PHYSICS_SIMULATION') return;
     if (awaitingSync) return;
@@ -2403,11 +2440,23 @@ function setupInput(scene) {
         const p = getCanvasPos(e.clientX, e.clientY);
         let vx = (selectedDisc.x - p.x) * FORCE_MULT;
         let vy = (selectedDisc.y - p.y) * FORCE_MULT;
-        const mag = Math.hypot(vx, vy);
+        let mag = Math.hypot(vx, vy);
         if (mag < 0.5) return;
-        if (mag > MAX_VELOCITY) {
-            vx = (vx / mag) * MAX_VELOCITY;
-            vy = (vy / mag) * MAX_VELOCITY;
+
+        // Habilidad TURBO: multiplica el modulo del disparo (puede pasar el clamp normal)
+        let turboMax = MAX_VELOCITY;
+        if (abilityArmed) {
+            turboMax = MAX_VELOCITY * TURBO_MULTIPLIER;
+            const turboTeam = (net.mode === 'local' && !currentBot) ? currentTeam : (net.myTeam || 'red');
+            abilityUsed[turboTeam] = true;
+            abilityArmed = false;
+            // pequeño feedback sonoro propio del boost
+            playUiClick();
+        }
+        if (mag > turboMax) {
+            vx = (vx / mag) * turboMax;
+            vy = (vy / mag) * turboMax;
+            mag = turboMax;
         }
 
         selectedDisc.setVelocity(vx, vy);
@@ -2417,6 +2466,7 @@ function setupInput(scene) {
         if (net.mode !== 'local' && net.connected) {
             sendNet({ type: 'shoot', idx: discs.indexOf(selectedDisc), vx, vy, trail });
         }
+        if (turboBtn) turboBtn.classList.add('hidden');
         setState('PHYSICS_SIMULATION');
     }
 

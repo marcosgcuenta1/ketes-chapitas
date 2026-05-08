@@ -693,6 +693,46 @@
         }
         .sound-btn:active { transform: scale(0.96); }
 
+        .turbo-btn {
+            position: absolute;
+            bottom: 90px; right: 28px;
+            background: linear-gradient(135deg, rgba(255,200,40,0.18), rgba(255,90,40,0.18));
+            border: 1px solid rgba(255,200,40,0.55);
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
+            font-size: 14px;
+            letter-spacing: 3px;
+            padding: 14px 22px;
+            border-radius: 999px;
+            cursor: pointer;
+            box-shadow: 0 0 28px rgba(255,180,40,0.35), 0 8px 22px rgba(0,0,0,0.55);
+            transition: all 180ms ease;
+            z-index: 11;
+            animation: turbo-pulse 1.6s ease-in-out infinite;
+        }
+        .turbo-btn:hover {
+            background: linear-gradient(135deg, rgba(255,200,40,0.30), rgba(255,90,40,0.30));
+            border-color: rgba(255,200,40,0.85);
+            transform: scale(1.06);
+            box-shadow: 0 0 38px rgba(255,180,40,0.55), 0 10px 28px rgba(0,0,0,0.6);
+        }
+        .turbo-btn.hidden { display: none; }
+        .turbo-btn.armed {
+            background: linear-gradient(135deg, rgba(255,40,40,0.45), rgba(255,180,0,0.45));
+            border-color: #fff;
+            color: #fff;
+            animation: turbo-pulse-armed 0.6s ease-in-out infinite;
+        }
+        @keyframes turbo-pulse {
+            0%, 100% { box-shadow: 0 0 24px rgba(255,180,40,0.30), 0 8px 22px rgba(0,0,0,0.55); }
+            50%      { box-shadow: 0 0 38px rgba(255,180,40,0.55), 0 8px 22px rgba(0,0,0,0.55); }
+        }
+        @keyframes turbo-pulse-armed {
+            0%, 100% { transform: scale(1); }
+            50%      { transform: scale(1.06); }
+        }
+
         .hint  { font-size: 13px; opacity: 0.55; margin: 4px 0 0; letter-spacing: 1px; }
         .state { font-size: 11px; opacity: 0.35; font-family: monospace; margin: 0; letter-spacing: 1px; }
 
@@ -1523,6 +1563,7 @@
     <div id="game-screen" class="game-screen hidden">
         <button id="exit-match-btn" class="exit-btn" title="Volver al menú">SALIR</button>
         <button id="sound-btn" class="sound-btn" title="Silenciar / activar sonido" aria-label="Sonido">🔊</button>
+        <button id="turbo-btn" class="turbo-btn hidden" title="Habilidad TURBO: próximo disparo +40% potencia">⚡ TURBO</button>
         <div class="game-area">
             <div class="hud-overlay">
                 <div class="scoreboard">
