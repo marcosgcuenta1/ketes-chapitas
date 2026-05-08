@@ -1014,6 +1014,12 @@ function startGame() {
         height: FIELD_H,
         parent: 'game-container',
         backgroundColor: '#0a1208',
+        // Escalar el canvas para que quepa en pantallas pequeñas (movil) sin cortar nada.
+        // FIT mantiene el aspect ratio; CENTER_BOTH lo deja centrado en el padre.
+        scale: {
+            mode: Phaser.Scale.FIT,
+            autoCenter: Phaser.Scale.CENTER_BOTH
+        },
         physics: { default: 'matter', matter: { gravity: { x: 0, y: 0 }, debug: false } },
         scene: { create, update }
     });

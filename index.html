@@ -2,6 +2,9 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Chapitas Fubol</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%BD%3C/text%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -568,9 +571,15 @@
         }
         .game-screen.hidden { opacity: 0; pointer-events: none; }
 
-        /* Game area: contiene el canvas de Phaser y el marcador superpuesto */
+        /* Game area: contiene el canvas de Phaser y el marcador superpuesto.
+           Se dimensiona al viewport conservando aspect-ratio 3:2 (1080x720) para que
+           en movil/tablet horizontal el canvas se reescale sin recortes. */
         .game-area {
             position: relative;
+            width: min(100vw, calc((100vh - 80px) * 1.5));
+            aspect-ratio: 3 / 2;
+            max-width: 100vw;
+            max-height: calc(100vh - 80px);
         }
 
         /* HUD superpuesto sobre la grada superior del campo */
@@ -674,7 +683,18 @@
             transition: color 200ms ease;
         }
 
-        #game-container { box-shadow: 0 24px 60px rgba(0,0,0,0.7); border-radius: 8px; overflow: hidden; }
+        #game-container {
+            box-shadow: 0 24px 60px rgba(0,0,0,0.7);
+            border-radius: 8px;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+        }
+        #game-container canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+        }
 
         .exit-btn {
             position: absolute;
@@ -1602,6 +1622,63 @@
             z-index: 50;
         }
         .fade.active { opacity: 1; pointer-events: all; }
+
+        /* =================================================================
+           RESPONSIVE: movil/tablet horizontal — comprime HUD y botones para
+           que nada se salga del viewport. La pista en si la escala Phaser.
+           ================================================================= */
+        @media (max-height: 500px), (max-width: 900px) {
+            .scoreboard {
+                gap: 10px;
+                padding: 5px 10px;
+            }
+            .score-numbers { gap: 8px; font-size: 22px; letter-spacing: 2px; }
+            .player-side { min-width: 0; gap: 6px; }
+            .player-photo { width: 32px; height: 32px; }
+            .player-name { font-size: 10px; max-width: 80px; }
+            .player-tag  { font-size: 8px; }
+            .turbo-indicator { width: 22px; height: 22px; font-size: 13px; margin: 0 3px; }
+            .hud-overlay { top: 6px; gap: 2px; }
+
+            .exit-btn { top: 8px; right: 10px; padding: 6px 12px; font-size: 9px; letter-spacing: 2px; }
+            .sound-btn { top: 8px; left: 10px; width: 30px; height: 30px; font-size: 14px; }
+
+            .turbo-btn { padding: 6px 10px; font-size: 10px; gap: 6px; bottom: 8px; left: 8px; }
+            .turbo-btn .turbo-icon { font-size: 18px; }
+
+            .hint, .state { font-size: 10px; margin: 2px 0; }
+            .state { display: none; }
+
+            .net-badge {
+                font-size: 9px; padding: 4px 10px; letter-spacing: 1.5px;
+            }
+
+            /* Popups: que no superen el ancho */
+            .turbo-popup { padding: 10px 16px; gap: 10px; top: 12%; }
+            .turbo-popup-icon { font-size: 36px; }
+            .turbo-popup-title { font-size: 13px; letter-spacing: 2px; }
+            .turbo-popup-desc  { font-size: 10px; }
+
+            /* Trophy toasts mas compactos */
+            .trophy-toasts { top: 8px; right: 8px; }
+
+            /* Menu: tarjeta mas pequeña */
+            .menu-card { padding: 18px; }
+            .title { font-size: 28px; }
+            .subtitle { font-size: 11px; }
+            .picker-label { font-size: 10px; margin: 10px 0 6px; }
+            .play-btn { font-size: 12px; padding: 10px 18px; letter-spacing: 2px; }
+            .mode-big { padding: 10px 14px; font-size: 12px; }
+            .weather-chip { padding: 5px 10px; font-size: 9px; }
+        }
+
+        /* Pantallas muy estrechas (movil pequeño en horizontal extremo) */
+        @media (max-height: 380px) {
+            .player-name, .player-tag { display: none; }
+            .player-side { display: none; }    /* solo numeros + indicadores */
+            .score-numbers { font-size: 18px; }
+            .turbo-btn .turbo-label { display: none; }
+        }
     </style>
 </head>
 <body>
