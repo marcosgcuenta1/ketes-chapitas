@@ -1570,6 +1570,7 @@ function eliminateDisc(disc) {
     if (!disc || disc._eliminated) return;
     disc._eliminated = true;
     const team = disc.team;
+    const ex = disc.x, ey = disc.y;
     if (team && players[team]) {
         const i = players[team].indexOf(disc);
         if (i >= 0) players[team].splice(i, 1);
@@ -1582,8 +1583,94 @@ function eliminateDisc(disc) {
         try { disc.shadowSprite.destroy(); } catch (_) {}
     }
     try { disc.destroy(); } catch (_) {}
+    spawnBoomEffect(phaserScene, ex, ey, team);
     playBounce(8);   // sonido de "expulsion"
     updateUI();
+}
+
+// Anima un BOOM!! en la posicion donde la chapa fue eliminada: nube de polvo + texto.
+function spawnBoomEffect(scene, x, y, team) {
+    if (!scene) return;
+    // Mantener el efecto visible aunque la chapa se haya salido del campo: clamp a la zona visible
+    const tx = Phaser.Math.Clamp(x, 30, FIELD_W - 30);
+    const ty = Phaser.Math.Clamp(y, 30, FIELD_H - 30);
+
+    // Anillo de explosion
+    const ring = scene.add.graphics().setDepth(18);
+    ring.lineStyle(6, 0xffd87a, 0.95);
+    ring.strokeCircle(tx, ty, 18);
+    scene.tweens.add({
+        targets: ring,
+        alpha: 0,
+        duration: 480,
+        ease: 'Cubic.Out',
+        onUpdate: (tw) => {
+            const t = tw.progress;
+            ring.clear();
+            ring.lineStyle(6 - t * 4, 0xffd87a, 0.95 - t * 0.95);
+            ring.strokeCircle(tx, ty, 18 + t * 60);
+        },
+        onComplete: () => ring.destroy()
+    });
+
+    // Particulas de polvo (puntos amarillentos volando hacia fuera)
+    const dust = scene.add.graphics().setDepth(18);
+    const dustParts = [];
+    for (let i = 0; i < 16; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 80 + Math.random() * 160;
+        dustParts.push({
+            x: tx, y: ty,
+            vx: Math.cos(a) * sp,
+            vy: Math.sin(a) * sp - 30,
+            r: 3 + Math.random() * 4,
+            life: 0
+        });
+    }
+    const colorPrimary = team === 'red' ? 0xff6a6a : team === 'blue' ? 0x7fb6ff : 0xffd87a;
+    const tween = scene.tweens.add({
+        targets: { t: 0 },
+        t: 1,
+        duration: 600,
+        onUpdate: (tw) => {
+            const dt = 1 / 60;
+            dust.clear();
+            for (const p of dustParts) {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vy += 240 * dt;     // gravedad ligera
+                p.life = tw.progress;
+                const a = 1 - p.life;
+                dust.fillStyle(colorPrimary, a * 0.9);
+                dust.fillCircle(p.x, p.y, p.r * (1 - p.life * 0.5));
+            }
+        },
+        onComplete: () => dust.destroy()
+    });
+
+    // Texto BOOM!! con escala + fade
+    const txt = scene.add.text(tx, ty, 'BOOM!!', {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '52px',
+        fontStyle: 'bold',
+        color: '#ffd87a',
+        stroke: '#3a1a00',
+        strokeThickness: 6
+    }).setOrigin(0.5).setDepth(20).setScale(0.2).setAngle(-12 + Math.random() * 24);
+    scene.tweens.add({
+        targets: txt,
+        scale: 1.6,
+        y: ty - 40,
+        alpha: 0,
+        duration: 700,
+        ease: 'Back.Out',
+        onComplete: () => txt.destroy()
+    });
+
+    // Camera shake corto
+    if (scene.cameras && scene.cameras.main) {
+        scene.cameras.main.shake(160, 0.006);
+    }
 }
 
 // Recorre los discos y elimina los que se han salido del rectangulo del campo.
@@ -1878,9 +1965,83 @@ function paintStands(ctx) {
 }
 
 function drawStadium(scene) {
+    const mode = GAME_MODES[currentMode];
+    if (mode && mode.isKnockout) {
+        drawSumoArena(scene);
+        setupWeatherEffects(scene);
+        return;
+    }
     scene.add.image(0, 0, 'grass').setOrigin(0, 0).setDepth(0);
     drawFieldLines(scene);
     setupWeatherEffects(scene);
+}
+
+// Estadio estilo sumo (dohyō): tatami exterior beige + ring central dorado.
+// Las chapas que se salen del rectangulo de campo (margen) son eliminadas.
+function drawSumoArena(scene) {
+    const cx = FIELD_W / 2;
+    const cy = FIELD_H / 2;
+
+    // Fondo: degradado oscuro tipo gimnasio
+    const bg = scene.add.graphics().setDepth(0);
+    bg.fillStyle(0x161812, 1);
+    bg.fillRect(0, 0, FIELD_W, FIELD_H);
+
+    // Tatami: bandas alternas amarillo-pajizas que cubren todo el campo de juego
+    const tatami = scene.add.graphics().setDepth(0.3);
+    const fxL = FIELD_PAD_X, fxR = FIELD_W - FIELD_PAD_X;
+    const fyT = FIELD_PAD_Y, fyB = FIELD_H - FIELD_PAD_Y;
+    const innerW = fxR - fxL;
+    const innerH = fyB - fyT;
+    // Borde de marco oscuro
+    tatami.fillStyle(0x3b2a14, 1);
+    tatami.fillRect(fxL - 6, fyT - 6, innerW + 12, innerH + 12);
+    // Suelo tatami
+    const stripH = 22;
+    for (let y = fyT; y < fyB; y += stripH) {
+        tatami.fillStyle((Math.floor((y - fyT) / stripH) % 2 === 0) ? 0xc9a866 : 0xb89657, 1);
+        tatami.fillRect(fxL, y, innerW, Math.min(stripH, fyB - y));
+    }
+    // Lineas de juntas verticales (cada 60px) sutiles
+    tatami.lineStyle(1, 0x000000, 0.18);
+    for (let x = fxL + 60; x < fxR; x += 60) {
+        tatami.lineBetween(x, fyT, x, fyB);
+    }
+
+    // Ring central (dohyō): circulo dorado con borde blanco
+    const radiusOuter = Math.min(innerW, innerH) * 0.42;
+    const radiusInner = radiusOuter - 8;
+    const ring = scene.add.graphics().setDepth(0.6);
+    // Sombra exterior leve
+    ring.fillStyle(0x000000, 0.25);
+    ring.fillCircle(cx, cy + 4, radiusOuter + 6);
+    // Aro blanco (linea perimetral del dohyō)
+    ring.fillStyle(0xfff4d8, 1);
+    ring.fillCircle(cx, cy, radiusOuter);
+    // Centro arenoso
+    ring.fillStyle(0xd9b06a, 1);
+    ring.fillCircle(cx, cy, radiusInner);
+    // Punto central
+    ring.lineStyle(3, 0x6b3a12, 0.85);
+    ring.strokeCircle(cx, cy, 28);
+    ring.fillStyle(0x6b3a12, 0.65);
+    ring.fillCircle(cx, cy, 4);
+
+    // Marca "KNOCKOUT" en pequeño tipo banner
+    scene.add.text(cx, fyT - 18, 'DOHYŌ · KNOCKOUT', {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '14px',
+        color: '#ffd87a'
+    }).setOrigin(0.5, 0.5).setDepth(1.2);
+
+    // Texto sutil "FUERA = OUT" en cada esquina
+    const cornerStyle = {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '10px',
+        color: '#888'
+    };
+    scene.add.text(fxL + 8, fyT + 4, 'FUERA = OUT', cornerStyle).setDepth(1.2);
+    scene.add.text(fxR - 8, fyB - 14, 'FUERA = OUT', cornerStyle).setOrigin(1, 0).setDepth(1.2);
 }
 
 // Aplica los efectos visuales del clima seleccionado: tinte de pantalla y particulas.
