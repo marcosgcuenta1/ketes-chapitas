@@ -44,6 +44,51 @@ const FORMATION = [
     { role: 'atk', fx: 0.40, fy: 0.64 }
 ];
 
+// ================================================================
+// MODOS DE JUEGO
+// ================================================================
+// Cada modo personaliza formacion, numero de balones, condicion de victoria, etc.
+// Los modos no incluidos heredan el comportamiento "normal".
+const GAME_MODES = {
+    normal: {
+        label: 'PARTIDO NORMAL',
+        description: '5 vs 5 clasico, gana quien llegue antes a los goles fijados',
+        emoji: '⚽',
+        teamSize: 5,
+        formation: FORMATION,
+        ballCount: 1,
+        usesGoalsToWin: true,
+        usesAi: true,
+        usesPvp: true
+    },
+    penaltis: {
+        label: 'PENALTIS',
+        description: '5 lanzamientos cada uno, 1 vs 1. Gana quien meta mas',
+        emoji: '🥅',
+        teamSize: 1,
+        formation: [{ role: 'atk', fx: 0.40, fy: 0.50 }],   // sola la chapa lanzadora
+        gkFormation: [{ role: 'gk', fx: 0.07, fy: 0.50 }],   // el rival es solo portero
+        ballCount: 1,
+        shotsPerSide: 5,                                      // 5 disparos por jugador
+        usesGoalsToWin: false,
+        usesAi: true,
+        usesPvp: true
+    },
+    caos: {
+        label: 'CAOS DOBLE BALÓN',
+        description: '5 vs 5 con DOS balones a la vez. Locuuura',
+        emoji: '🎱',
+        teamSize: 5,
+        formation: FORMATION,
+        ballCount: 2,
+        usesGoalsToWin: true,
+        usesAi: true,
+        usesPvp: true
+    }
+};
+
+let currentMode = 'normal';
+
 const TEAM_COLORS = {
     red:  { fill: 0xcc1f1f },
     blue: { fill: 0x2360c0 }
@@ -54,8 +99,9 @@ const PALETTE_CONFETTI = [0xff5050, 0x5090ff, 0xffd400, 0xff8a3d, 0x60d0ff, 0xff
 // ================================================================
 // ESTADO
 // ================================================================
-let ball;
-let discs = [];                       // [...players.red, ...players.blue, ball]  -- indexable estable
+let ball;                             // primer (o unico) balon
+let balls = [];                       // todos los balones (1 en modo normal, 2 en caos)
+let discs = [];                       // [...players.red, ...players.blue, ...balls]  -- indexable estable
 let players = { red: [], blue: [] };
 let initialPositions = new Map();
 
@@ -331,7 +377,32 @@ document.getElementById('exit-match-btn').addEventListener('click', () => {
 playLocalBtn.addEventListener('click', () => {
     net.mode = 'local';
     net.myTeam = 'red';
+    showModeSelect();
+});
+
+// Selector de modo de juego (entre menu principal y bot select)
+const modeSelectEl  = document.getElementById('mode-select');
+const modeOptionsEl = document.getElementById('mode-options');
+
+function showModeSelect() {
+    menu.classList.add('hidden');
+    modeSelectEl.classList.remove('hidden');
+}
+
+modeOptionsEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.mode-option');
+    if (!btn) return;
+    if (btn.classList.contains('mode-option-disabled')) return;
+    const mode = btn.dataset.mode;
+    if (!GAME_MODES[mode]) return;
+    currentMode = mode;
+    modeSelectEl.classList.add('hidden');
     showBotSelect();
+});
+
+document.getElementById('mode-select-back').addEventListener('click', () => {
+    modeSelectEl.classList.add('hidden');
+    menu.classList.remove('hidden');
 });
 
 // --- Modo host ---
@@ -656,8 +727,9 @@ function create() {
 
     spawnTeam(this, 'red');
     spawnTeam(this, 'blue');
-    spawnBall(this);
-    discs = [...players.red, ...players.blue, ball];
+    const mode = GAME_MODES[currentMode] || GAME_MODES.normal;
+    spawnBalls(this, mode.ballCount || 1);
+    discs = [...players.red, ...players.blue, ...balls];
 
     createGoalParticles(this);
     trailGfx     = this.add.graphics().setDepth(8);
@@ -1530,7 +1602,9 @@ function spawnTeam(scene, team) {
     const innerW = FIELD_W - FIELD_PAD_X * 2;
     const innerH = FIELD_H - FIELD_PAD_Y * 2;
     const texKey = team === 'red' ? 'disc-red' : 'disc-blue';
-    for (const slot of FORMATION) {
+    const mode = GAME_MODES[currentMode] || GAME_MODES.normal;
+    const formation = mode.formation || FORMATION;
+    for (const slot of formation) {
         const fx = team === 'red' ? slot.fx : 1 - slot.fx;
         const x = FIELD_PAD_X + innerW * fx;
         const y = FIELD_PAD_Y + innerH * slot.fy;
@@ -1543,10 +1617,32 @@ function spawnTeam(scene, team) {
 }
 
 function spawnBall(scene) {
-    const x = FIELD_W / 2;
-    const y = FIELD_H / 2;
-    ball = createDisc(scene, x, y, BALL_RADIUS, 'disc-ball', BALL_MASS, FRICTION_AIR_BALL, 'ball');
-    initialPositions.set(ball, { x, y });
+    spawnBalls(scene, 1);
+}
+
+function spawnBalls(scene, count) {
+    balls = [];
+    if (count <= 1) {
+        const x = FIELD_W / 2;
+        const y = FIELD_H / 2;
+        const b = createDisc(scene, x, y, BALL_RADIUS, 'disc-ball', BALL_MASS, FRICTION_AIR_BALL, 'ball');
+        initialPositions.set(b, { x, y });
+        balls.push(b);
+        ball = b;
+        return;
+    }
+    // Multiples balones: separados horizontalmente alrededor del centro
+    const innerW = FIELD_W - FIELD_PAD_X * 2;
+    const spacing = Math.min(innerW * 0.22, 160);
+    for (let i = 0; i < count; i++) {
+        const offset = (i - (count - 1) / 2) * spacing;
+        const x = FIELD_W / 2 + offset;
+        const y = FIELD_H / 2;
+        const b = createDisc(scene, x, y, BALL_RADIUS, 'disc-ball', BALL_MASS, FRICTION_AIR_BALL, 'ball');
+        initialPositions.set(b, { x, y });
+        balls.push(b);
+    }
+    ball = balls[0];
 }
 
 function createDisc(scene, x, y, radius, textureKey, mass, frictionAir, label) {
@@ -1698,14 +1794,15 @@ function updateShadows() {
 }
 
 function updateBallSpin() {
-    if (!ball || !ball.body) return;
-    const v = ball.body.velocity;
-    const speed = Math.hypot(v.x, v.y);
-    if (speed < 0.1) return;
-    // Direccion de rotacion ligada a la mas dominante (vx con signo da feeling natural).
-    const sign = Math.abs(v.x) >= Math.abs(v.y) ? Math.sign(v.x) : Math.sign(v.y);
     const Body = Phaser.Physics.Matter.Matter.Body;
-    Body.rotate(ball.body, speed * 0.045 * (sign || 1));
+    for (const b of balls) {
+        if (!b || !b.body) continue;
+        const v = b.body.velocity;
+        const speed = Math.hypot(v.x, v.y);
+        if (speed < 0.1) continue;
+        const sign = Math.abs(v.x) >= Math.abs(v.y) ? Math.sign(v.x) : Math.sign(v.y);
+        Body.rotate(b.body, speed * 0.045 * (sign || 1));
+    }
 }
 
 function updateTrail() {
@@ -2188,7 +2285,7 @@ document.getElementById('pvp-btn').addEventListener('click', () => {
 
 document.getElementById('bot-select-back').addEventListener('click', () => {
     botSelectEl.classList.add('hidden');
-    menu.classList.remove('hidden');
+    showModeSelect();   // vuelve al selector de modo, no directo al menu
 });
 
 function chooseBot(botName) {
@@ -2623,6 +2720,8 @@ function returnToMenu() {
         gameScreen.classList.add('hidden');
         botPopupEl.classList.add('hidden');
         botSelectEl.classList.add('hidden');
+        modeSelectEl.classList.add('hidden');
+        currentMode = 'normal';
         if (botPopupPart) botPopupPart.innerHTML = '';
         menu.classList.remove('hidden');
         showPanel(null);

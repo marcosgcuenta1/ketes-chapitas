@@ -569,6 +569,92 @@
         .net-badge.visible { display: inline-block; }
         .net-badge.warning { color: #ffaa55; background: rgba(255,170,85,0.10); border-color: rgba(255,170,85,0.3); box-shadow: 0 0 18px rgba(255,170,85,0.18); }
 
+        /* ---------- Seleccion de modo de juego ---------- */
+        .mode-select {
+            position: fixed; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 24;
+            transition: opacity 320ms ease, visibility 320ms ease;
+        }
+        .mode-select.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+        .mode-select-card {
+            backdrop-filter: blur(22px) saturate(160%);
+            -webkit-backdrop-filter: blur(22px) saturate(160%);
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 22px;
+            padding: 38px 50px 28px;
+            text-align: center;
+            min-width: 760px;
+            box-shadow:
+                0 30px 80px rgba(0,0,0,0.55),
+                0 0 0 1px rgba(255,255,255,0.04) inset,
+                0 0 60px rgba(120,180,255,0.10);
+        }
+        .mode-select-title {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
+            font-size: 26px;
+            letter-spacing: 5px;
+            margin: 0 0 24px;
+            background: linear-gradient(135deg, #fff 0%, #6fa9ff 50%, #ff6fa9 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .mode-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .mode-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 16px 10px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 14px;
+            cursor: pointer;
+            color: #fff;
+            transition: all 200ms ease;
+        }
+        .mode-option:hover {
+            background: rgba(255,255,255,0.10);
+            border-color: rgba(255,255,255,0.30);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.45), 0 0 24px rgba(120,180,255,0.18);
+        }
+        .mode-emoji { font-size: 36px; line-height: 1; }
+        .mode-name {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 13px;
+            letter-spacing: 1.5px;
+            margin-top: 2px;
+        }
+        .mode-desc {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 9px;
+            letter-spacing: 1px;
+            opacity: 0.55;
+            text-transform: uppercase;
+            line-height: 1.2;
+        }
+        .mode-option-disabled {
+            opacity: 0.38;
+            cursor: not-allowed;
+        }
+        .mode-option-disabled:hover {
+            background: rgba(255,255,255,0.04);
+            border-color: rgba(255,255,255,0.10);
+            transform: none;
+            box-shadow: none;
+        }
+
         /* ---------- Seleccion de bot rival ---------- */
         .bot-select {
             position: fixed; inset: 0;
@@ -1070,6 +1156,46 @@
                 <p class="net-status" id="join-status">&nbsp;</p>
                 <button class="back-btn" data-back>VOLVER</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Seleccion de modo de juego tras JUGAR LOCAL -->
+    <div id="mode-select" class="mode-select hidden">
+        <div class="mode-select-card">
+            <h2 class="mode-select-title">ELIGE MODO DE JUEGO</h2>
+            <div class="mode-options" id="mode-options">
+                <button class="mode-option" data-mode="normal">
+                    <div class="mode-emoji">⚽</div>
+                    <div class="mode-name">PARTIDO NORMAL</div>
+                    <div class="mode-desc">5 vs 5 clásico</div>
+                </button>
+                <button class="mode-option" data-mode="penaltis">
+                    <div class="mode-emoji">🥅</div>
+                    <div class="mode-name">PENALTIS</div>
+                    <div class="mode-desc">5 lanzamientos cada uno</div>
+                </button>
+                <button class="mode-option" data-mode="caos">
+                    <div class="mode-emoji">🎱</div>
+                    <div class="mode-name">CAOS DOBLE BALÓN</div>
+                    <div class="mode-desc">5 vs 5 con 2 balones</div>
+                </button>
+                <button class="mode-option mode-option-disabled" data-mode="diana">
+                    <div class="mode-emoji">🎯</div>
+                    <div class="mode-name">DIANA</div>
+                    <div class="mode-desc">Próximamente</div>
+                </button>
+                <button class="mode-option mode-option-disabled" data-mode="knockout">
+                    <div class="mode-emoji">💥</div>
+                    <div class="mode-name">KNOCKOUT</div>
+                    <div class="mode-desc">Próximamente</div>
+                </button>
+                <button class="mode-option mode-option-disabled" data-mode="freekick">
+                    <div class="mode-emoji">🧱</div>
+                    <div class="mode-name">TIRO LIBRE</div>
+                    <div class="mode-desc">Próximamente</div>
+                </button>
+            </div>
+            <button class="back-btn" id="mode-select-back">VOLVER</button>
         </div>
     </div>
 
