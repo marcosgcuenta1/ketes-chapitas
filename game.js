@@ -921,13 +921,36 @@ const PEER_CONFIG = {
     ]
 };
 
-function setupHost() {
+// Genera codigo corto (6 chars sin caracteres ambiguos: sin 0/O, 1/I)
+const SHORT_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const SHORT_CODE_PREFIX   = 'CHAP-';
+function generateShortCode() {
+    let s = '';
+    for (let i = 0; i < 6; i++) {
+        s += SHORT_CODE_ALPHABET[Math.floor(Math.random() * SHORT_CODE_ALPHABET.length)];
+    }
+    return s;
+}
+// Normaliza una entrada del usuario a id PeerJS completo: acepta "AB12CD" o "CHAP-AB12CD".
+function normalizeShortCode(raw) {
+    if (!raw) return '';
+    const up = raw.trim().toUpperCase().replace(/\s+/g, '');
+    if (up.startsWith(SHORT_CODE_PREFIX)) return up;
+    return SHORT_CODE_PREFIX + up;
+}
+
+function setupHost(retryCount) {
+    retryCount = retryCount || 0;
     net.mode = 'host';
     net.myTeam = 'red';
 
-    net.peer = new Peer({ config: PEER_CONFIG, debug: 1 });
+    const shortCode = generateShortCode();
+    const peerId = SHORT_CODE_PREFIX + shortCode;
+    net.peer = new Peer(peerId, { config: PEER_CONFIG, debug: 1 });
     net.peer.on('open', (id) => {
-        hostCodeEl.textContent = id;
+        // Mostramos solo la parte corta (mas facil de compartir verbalmente)
+        const display = id.startsWith(SHORT_CODE_PREFIX) ? id.slice(SHORT_CODE_PREFIX.length) : id;
+        hostCodeEl.textContent = display;
         hostStatus.textContent = 'Esperando rival…';
     });
     net.peer.on('connection', (conn) => {
@@ -941,6 +964,12 @@ function setupHost() {
         });
     });
     net.peer.on('error', (err) => {
+        // Si el codigo corto colisiono, retry con uno nuevo (max 3 intentos)
+        if (err && err.type === 'unavailable-id' && retryCount < 3) {
+            try { net.peer.destroy(); } catch (_) {}
+            setupHost(retryCount + 1);
+            return;
+        }
         hostStatus.textContent = 'Error: ' + (err.type || err.message || 'desconocido');
         hostStatus.className = 'net-status err';
     });
@@ -954,9 +983,10 @@ function setupClient(hostId) {
     joinStatus.className = 'net-status';
     joinConnectBtn.disabled = true;
 
+    const fullId = normalizeShortCode(hostId);
     net.peer = new Peer({ config: PEER_CONFIG, debug: 1 });
     net.peer.on('open', () => {
-        const conn = net.peer.connect(hostId, { reliable: true });
+        const conn = net.peer.connect(fullId, { reliable: true });
         net.conn = conn;
         wireConn(conn);
         conn.on('open', () => {
